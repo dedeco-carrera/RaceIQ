@@ -7,11 +7,18 @@ import { writeFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
 
+// Immediate marker — proves Bun's JS runtime started at all
+const _bootDir = join(process.env.APPDATA ?? homedir(), "RaceIQ");
+try {
+  mkdirSync(_bootDir, { recursive: true });
+  writeFileSync(join(_bootDir, "boot-marker.txt"), `started ${new Date().toISOString()} pid=${process.pid}\n`, { flag: "a" });
+} catch {}
+
 function crashLog(err: unknown): void {
   const msg = `[${new Date().toISOString()}] FATAL: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`;
   // Try %APPDATA%/RaceIQ first, fall back to exe directory, then cwd
   const candidates = [
-    join(process.env.APPDATA ?? homedir(), "RaceIQ"),
+    _bootDir,
     dirname(process.execPath),
     process.cwd(),
   ];
