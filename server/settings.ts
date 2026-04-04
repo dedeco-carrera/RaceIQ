@@ -32,6 +32,11 @@ export type ColorThresholds = z.infer<typeof ColorThresholdsSchema>;
 
 const DEFAULTS: AppSettings = AppSettingsSchema.parse({});
 
+/** Returns true if settings file doesn't exist yet (fresh install) */
+export function isFirstRun(): boolean {
+  return !existsSync(SETTINGS_PATH);
+}
+
 export function loadSettings(): AppSettings {
   if (!existsSync(SETTINGS_DIR)) {
     mkdirSync(SETTINGS_DIR, { recursive: true });

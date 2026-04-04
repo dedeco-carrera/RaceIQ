@@ -45,6 +45,10 @@ const HTTP_PORT = Number(process.env.SERVER_PORT) || 3117;
 import { sqlite } from "./db/index";
 import { deleteEmptySessions } from "./db/queries";
 
+// Detect first run (settings file doesn't exist yet) before loadSettings creates it
+import { isFirstRun } from "./settings";
+const firstRun = isFirstRun();
+
 // Load persisted settings and apply
 const settings = loadSettings();
 if (settings.wsRefreshRate) {
@@ -153,6 +157,21 @@ if (process.platform === "win32") {
   accReader.start();
   console.log("[Server] ACC shared memory reader started (will connect when ACC is running)");
   startTray(HTTP_PORT);
+}
+
+// On first install, auto-open the dashboard in the default browser
+if (firstRun) {
+  const url = `http://localhost:${HTTP_PORT}`;
+  console.log(`[Server] First run detected — opening ${url}`);
+  try {
+    if (process.platform === "win32") {
+      spawn("cmd", ["/c", "start", url], { stdio: "ignore", detached: true }).unref();
+    } else if (process.platform === "darwin") {
+      spawn("open", [url], { stdio: "ignore", detached: true }).unref();
+    } else {
+      spawn("xdg-open", [url], { stdio: "ignore", detached: true }).unref();
+    }
+  } catch {}
 }
 
 console.log(`[Server] RaceIQ Server is ready!`);
