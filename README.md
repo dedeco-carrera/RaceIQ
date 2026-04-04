@@ -50,7 +50,7 @@ RaceIQ extracts track outlines and boundary data from game files. Make sure your
 
 ### 3. Run and Connect
 
-Open RaceIQ and follow the setup wizard. Configure your game's telemetry settings to send UDP data to `127.0.0.1:5301`, then start a race — telemetry will appear automatically.
+Open RaceIQ and follow the setup wizard. Configure your game's telemetry settings to send UDP data to `127.0.0.1:5301`, then start a race — telemetry will appear automatically. You can reopen the dashboard at any time by double-clicking the RaceIQ icon in the system tray.
 
 > **Already forwarding telemetry to a wheel base or other app?** Use [UDP Forwarder](https://github.com/SpeedHQ/udp-forwarder) to send telemetry to multiple destinations at once.
 
