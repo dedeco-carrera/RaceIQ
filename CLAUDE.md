@@ -40,6 +40,7 @@ cd client && bun run lint    # ESLint
 bun run extract:tracks       # extract track data from game files
 bun run laps:export          # export lap data
 bun run laps:import          # import lap data
+bun run lighthouse           # run Lighthouse audit on local dev server
 ```
 
 ### Environment Variables
@@ -59,19 +60,24 @@ bun run laps:import          # import lap data
 - `server/udp.ts` — UDP socket listening for game telemetry packets
 - `server/parsers/` — Game-specific binary packet parsers (dispatched via game adapter registry)
 - `server/games/` — Server game adapters (parser binding, AI prompts) — see [Adding a New Game](#adding-a-new-game)
-- `server/routes.ts` — All Hono API routes under `/api` (laps, sessions, settings, analysis, export, compare, profiles, corners)
+- `server/routes.ts` — Hono app composition; individual route files live in `server/routes/` (laps, sessions, settings, cars, tracks, tunes, ACC, F1 2025, misc)
 - `server/ws.ts` — WebSocket manager, broadcasts parsed packets to all connected clients
 - `server/lap-detector.ts` — Detects lap boundaries from telemetry stream
 - `server/corner-detection.ts` — Identifies racing corners from telemetry data (game-aware steering)
 - `server/ai/analyst-prompt.ts` — Builds prompts for Claude API lap analysis
 - `server/db/schema.ts` — Drizzle ORM schema (profiles, sessions, laps, corners, lapAnalyses, trackOutlines)
 - `server/db/queries.ts` — Database query helpers
+- `server/pipeline.ts` — Telemetry processing pipeline (parse → broadcast → lap detect)
+- `server/sector-tracker.ts` — Server-side sector timing tracker
+- `server/tray.ts` — System tray integration (Windows)
+- `server/update-check.ts` — Auto-update checker
 
 **Client (React 19 + Vite + TanStack Router)**
 - `client/src/main.tsx` — App entry point
 - `client/src/routes/__root.tsx` — Root layout with TanStack Router
 - `client/src/routeTree.gen.ts` — Auto-generated route tree (do not edit manually)
 - `client/src/stores/telemetry.ts` — Zustand store for WebSocket connection state, current packet, packets/sec
+- `client/src/stores/game.ts` — Zustand store for active game context (gameId → route mapping)
 - Key components:
   - `LiveTelemetry.tsx` — Real-time telemetry dashboard
   - `LapAnalyse.tsx` — Lap analysis with corner data
@@ -129,7 +135,7 @@ The wheel picker in Settings and Setup Wizard automatically discovers all images
 | Runtime | Bun |
 | Server framework | Hono |
 | Database | SQLite + Drizzle ORM |
-| Frontend | React 19, Vite 8, TypeScript 5.9 |
+| Frontend | React 19, Vite 8, TypeScript 6 |
 | Routing | TanStack Router (file-based, auto-generated) |
 | State | Zustand (client), TanStack Query (server state) |
 | Styling | Tailwind CSS v4 + shadcn |
@@ -165,52 +171,17 @@ The app uses a registry-based adapter pattern to support multiple racing games. 
 
 ### Adding a New Game
 
-To add support for a new racing game (e.g. Assetto Corsa Competizione):
+To add support for a new racing game (e.g. Gran Turismo):
 
-**1. Add game ID** — Add `"acc"` to `KNOWN_GAME_IDS` in `shared/types.ts`
+1. **Add game ID** — Add `"gt7"` to `KNOWN_GAME_IDS` in `shared/types.ts`
+2. **Create shared adapter** — `shared/games/gt7/index.ts` implementing `GameAdapter` (identity, car/track resolution, steering config, coord system)
+3. **Create server adapter** — `server/games/gt7/index.ts` implementing `ServerGameAdapter` (`canHandle()`, `tryParse()`, `createParserState()`, AI prompts)
+4. **Create UDP parser** — `server/parsers/gt7.ts` with binary parsing logic
+5. **Register adapters** — Import and call `registerGame()` in `shared/games/init.ts`, `registerServerGame()` in `server/games/init.ts`
+6. **Create client routes** — `client/src/routes/gt7.tsx` (layout with `<GameProvider gameId="gt7">`) and sub-routes in `client/src/routes/gt7/`
+7. **Add game data** — Car/track CSVs in `shared/`, track outlines in `shared/track-outlines/gt7/`
 
-**2. Create shared adapter** — `shared/games/acc/index.ts`:
-```typescript
-import type { GameAdapter } from "../types";
-
-export const accAdapter: GameAdapter = {
-  id: "acc",
-  displayName: "Assetto Corsa Competizione",
-  shortName: "ACC",
-  routePrefix: "acc",
-  coordSystem: "standard-xyz",
-  steeringCenter: 0,
-  steeringRange: 1,
-  getCarName(ordinal) { /* ... */ },
-  getTrackName(ordinal) { /* ... */ },
-};
-```
-
-**3. Create server adapter** — `server/games/acc/index.ts`:
-```typescript
-import type { ServerGameAdapter } from "../types";
-import { accAdapter } from "../../../shared/games/acc";
-
-export const accServerAdapter: ServerGameAdapter = {
-  ...accAdapter,
-  canHandle(buf) { /* detect ACC packets */ },
-  tryParse(buf, state) { /* parse to TelemetryPacket */ },
-  createParserState() { return null; },
-  aiSystemPrompt: `You are an expert ACC racing engineer...`,
-};
-```
-
-**4. Create UDP parser** — `server/parsers/acc.ts` with the binary parsing logic
-
-**5. Register adapters** — Add imports and registration calls to:
-- `shared/games/init.ts` — `registerGame(accAdapter)`
-- `server/games/init.ts` — `registerServerGame(accServerAdapter)`
-
-**6. Create client routes** — `client/src/routes/acc.tsx` (layout with `<GameProvider gameId="acc">`) and route stubs in `client/src/routes/acc/`
-
-**7. Add game data** — Car/track CSVs in `shared/`, track outlines in `shared/track-outlines/acc/`
-
-Everything else (navigation tabs, car/track name resolution, corner detection, AI prompts, parser dispatch) is handled automatically by the registry.
+See existing adapters (`fm-2023`, `f1-2025`, `acc`) for reference. Everything else (navigation tabs, car/track name resolution, corner detection, AI prompts, parser dispatch) is handled automatically by the registry.
 
 ### Testing
 
