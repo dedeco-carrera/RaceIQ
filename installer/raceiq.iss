@@ -38,29 +38,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Code]
-// Set the "Run as administrator" elevation bit on a .lnk shortcut file.
-// Flips bit 0x20 at byte offset 21 in the shortcut header.
-// Uses Stream.Position instead of Seek for Inno Setup 6.3+ compatibility.
-procedure SetElevationBit(Filename: string);
-var
-  Buffer: string;
-  Stream: TStream;
-begin
-  Filename := ExpandConstant(Filename);
-  Log('Setting elevation bit for ' + Filename);
-  Stream := TFileStream.Create(Filename, fmOpenReadWrite);
-  try
-    Stream.Position := 21;
-    SetLength(Buffer, 1);
-    Stream.ReadBuffer(Buffer, 1);
-    Buffer[1] := Chr(Ord(Buffer[1]) or $20);
-    Stream.Position := 21;
-    Stream.WriteBuffer(Buffer, 1);
-  finally
-    Stream.Free;
-  end;
-end;
-
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
@@ -72,6 +49,12 @@ begin
   Result := '';
 end;
 
+[Registry]
+; Always run raceiq.exe as administrator (triggers UAC prompt on launch)
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; \
+    ValueType: String; ValueName: "{app}\{#MyAppExeName}"; ValueData: "RUNASADMIN"; \
+    Flags: uninsdeletekeyifempty uninsdeletevalue
+
 [Files]
 Source: "..\dist\raceiq.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\public\*"; DestDir: "{app}\public"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -79,9 +62,9 @@ Source: "..\dist\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesub
 Source: "..\server\credstore.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; AfterInstall: SetElevationBit('{group}\{#MyAppName}.lnk')
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; AfterInstall: SetElevationBit('{commondesktop}\{#MyAppName}.lnk')
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
