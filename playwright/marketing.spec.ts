@@ -1,4 +1,6 @@
 import { test } from "@playwright/test";
+import { writeFileSync, readdirSync } from "fs";
+import { resolve } from "path";
 
 const SCREENSHOT_DIR = "../assets/screenshots";
 
@@ -63,4 +65,19 @@ test("screenshot: car-catalogue-forza-grid", async ({ page: p }) => {
     path: `${SCREENSHOT_DIR}/car-catalogue-forza-grid.png`,
     fullPage: false,
   });
+});
+
+test("generate screenshots README", async () => {
+  const dir = resolve(__dirname, SCREENSHOT_DIR);
+  const images = readdirSync(dir)
+    .filter((f) => /\.(png|jpe?g|webp|gif)$/i.test(f))
+    .sort();
+
+  const lines = ["# Screenshots", ""];
+  for (const img of images) {
+    const title = img.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
+    lines.push(`### ${title}`, "", `![${title}](${img})`, "");
+  }
+
+  writeFileSync(resolve(dir, "README.md"), lines.join("\n"));
 });
