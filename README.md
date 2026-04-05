@@ -23,11 +23,11 @@ It captures telemetry from your racing games, records every lap to a local datab
 ## Features
 
 - **Live telemetry** — real-time dashboard with speed, inputs, tires, suspension, G-forces, and 3D car visualization
-- **Track mapping** — includes track outlines with live car position and automatic track mapping for tracks that havent been included in the software.
+- **Track mapping** — includes track outlines with live car position and automatic track mapping for tracks that havent been included in the software
 - **Lap analysis** — automatic lap and corner detection, side-by-side comparison with time deltas
 - **AI coaching** — send any lap for AI-powered technique, setup, and tire feedback
 - **Vehicle setup** — tune catalog, car browser with performance data
-- **Tune analysis** — compare the fastest tunes and see popular setting ranges across the community
+- **Tune analysis** — compare the fastest tunes/setups and see popular setting ranges across the community
 - **Driver profiles** — multiple profiles, lap export, and aggregate stats
 
 ## Supported Games
