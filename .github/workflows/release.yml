@@ -74,9 +74,6 @@ jobs:
         shell: bash
         run: NODE_ENV=production bun build --compile --target=bun-windows-x64 --windows-icon=assets/raceiq.ico server/bootstrap.ts --outfile dist/raceiq.exe
 
-      - name: Patch exe to GUI subsystem (no console window)
-        run: bun scripts/patch-pe-gui.ts dist/raceiq.exe
-
       - name: Package
         shell: bash
         run: |

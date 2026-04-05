@@ -38,29 +38,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Code]
-// Set the "Run as administrator" elevation bit on a .lnk shortcut file.
-// Flips bit 0x20 at byte offset 21 in the shortcut header.
-// Uses Stream.Position instead of Seek for Inno Setup 6.3+ compatibility.
-procedure SetElevationBit(Filename: string);
-var
-  Buffer: string;
-  Stream: TStream;
-begin
-  Filename := ExpandConstant(Filename);
-  Log('Setting elevation bit for ' + Filename);
-  Stream := TFileStream.Create(Filename, fmOpenReadWrite);
-  try
-    Stream.Position := 21;
-    SetLength(Buffer, 1);
-    Stream.ReadBuffer(Buffer, 1);
-    Buffer[1] := Chr(Ord(Buffer[1]) or $20);
-    Stream.Position := 21;
-    Stream.WriteBuffer(Buffer, 1);
-  finally
-    Stream.Free;
-  end;
-end;
-
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
@@ -77,14 +54,15 @@ Source: "..\dist\raceiq.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\public\*"; DestDir: "{app}\public"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\server\credstore.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "raceiq-launcher.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; AfterInstall: SetElevationBit('{group}\{#MyAppName}.lnk')
+Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\raceiq-launcher.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; AfterInstall: SetElevationBit('{commondesktop}\{#MyAppName}.lnk')
+Name: "{commondesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\raceiq-launcher.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "wscript.exe"; Parameters: """{app}\raceiq-launcher.vbs"""; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/F /IM raceiq.exe"; Flags: runhidden
