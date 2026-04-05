@@ -86,12 +86,23 @@ export function LapAnalyse() {
 
   const [carName, setCarName] = useState("");
   const [trackName, setTrackName] = useState("");
+  const initialCursor = (search as any).cursor as number | undefined;
   const [cursorIdx, setCursorIdx] = useState(0);
   // Visual time fraction override — set during scrubbing through gaps
   // null = use cursorIdx's time fraction, number = override position
   const [visualTimeFrac, setVisualTimeFrac] = useState<number | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"live" | "insights">("live");
-  const [vizMode, setWheelTab] = useCookieState<"render" | "visual">("analyse-vizMode", "render");
+  const vizParam = (search as any).viz as string | undefined;
+  const [vizMode, setWheelTab] = useCookieState<"2d" | "3d">("analyse-vizMode", "2d");
+  // URL ?viz= param overrides cookie on mount
+  const appliedVizParam = useRef(false);
+  useEffect(() => {
+    if (appliedVizParam.current) return;
+    if (vizParam === "3d" || vizParam === "2d") {
+      setWheelTab(vizParam);
+      appliedVizParam.current = true;
+    }
+  }, [vizParam]);
   const [leftColWidth, setLeftColWidth] = useCookieState("analyse-leftCol", 150);
   const [rightColWidth, setRightColWidth] = useCookieState("analyse-rightCol", 650);
   const [playing, setPlaying] = useState(false);
@@ -194,14 +205,15 @@ export function LapAnalyse() {
     }
   }, [resolvedNames]);
 
-  // Sync selections to URL
+  // Sync selections to URL (preserve cursor/viz params)
   useEffect(() => {
     navigate({
-      search: {
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
         track: selectedTrack ?? undefined,
         car: selectedCar ?? undefined,
         lap: selectedLapId ?? undefined,
-      } as any,
+      }) as never,
       replace: true,
     });
   }, [selectedTrack, selectedCar, selectedLapId, navigate]);
@@ -219,16 +231,33 @@ export function LapAnalyse() {
     setSelectedLapId(null);
   }, []);
 
-  // Reset playback state when lap changes
+  // Reset playback state when lap changes (skip first mount for URL cursor)
+  const lapChangeCount = useRef(0);
   useEffect(() => {
     if (selectedLapId == null) return;
+    lapChangeCount.current++;
+    const isInitialMount = lapChangeCount.current === 1;
     setPlaying(false);
     playRef.current = false;
-    setCursorIdx(0);
-    cursorRef.current = 0;
+    if (!isInitialMount || !initialCursor) {
+      setCursorIdx(0);
+      cursorRef.current = 0;
+    }
     setCarName(selectedCar != null ? (carNames[selectedCar] ?? "") : "");
     setTrackName(selectedTrack != null ? (trackNames[selectedTrack] ?? "") : "");
   }, [selectedLapId]);
+
+  // Set cursor from URL param once telemetry loads
+  const appliedInitialCursor = useRef(false);
+  useEffect(() => {
+    if (appliedInitialCursor.current) return;
+    if (initialCursor != null && telemetry.length > 1) {
+      const idx = Math.min(initialCursor, telemetry.length - 1);
+      setCursorIdx(idx);
+      cursorRef.current = idx;
+      appliedInitialCursor.current = true;
+    }
+  }, [initialCursor, telemetry.length]);
 
   // Keep speedRef in sync and signal the animation to re-anchor timing
   const speedChangeRef = useRef(0);
@@ -236,6 +265,19 @@ export function LapAnalyse() {
     speedRef.current = playbackSpeed;
     speedChangeRef.current++;
   }, [playbackSpeed]);
+
+  // Draw initial cursor overlays after URL cursor is applied
+  useEffect(() => {
+    if (!appliedInitialCursor.current) return;
+    if (cursorIdx > 0 && telemetry.length > 1) {
+      // Delay to let charts mount
+      const timer = setTimeout(() => {
+        trackMapRef.current?.updateCursor(cursorIdx);
+        chartsPanelRef.current?.updateCursor(cursorIdx);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [cursorIdx, telemetry.length]);
 
   // Imperatively update all overlay canvases without triggering React re-renders
   const updateOverlays = useCallback((idx: number) => {
@@ -365,7 +407,8 @@ export function LapAnalyse() {
     setCursorIdx(idx);
     cursorRef.current = idx;
     seekRef.current++;
-  }, []);
+    updateOverlays(idx);
+  }, [updateOverlays]);
 
   const handleScrubStart = useCallback(() => {
     setPlaying(false);
@@ -747,9 +790,9 @@ export function LapAnalyse() {
               {/* Wheel panel tabs */}
               <div className="flex w-full border-b border-app-border shrink-0">
                 <button
-                  onClick={() => setWheelTab("render")}
+                  onClick={() => setWheelTab("2d")}
                   className={`flex-1 py-1.5 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
-                    vizMode === "render"
+                    vizMode === "2d"
                       ? "text-app-text border-b-2 border-app-accent"
                       : "text-app-text-muted hover:text-app-text"
                   }`}
@@ -757,9 +800,9 @@ export function LapAnalyse() {
                   2D
                 </button>
                 <button
-                  onClick={() => setWheelTab("visual")}
+                  onClick={() => setWheelTab("3d")}
                   className={`flex-1 py-1.5 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
-                    vizMode === "visual"
+                    vizMode === "3d"
                       ? "text-app-text border-b-2 border-app-accent"
                       : "text-app-text-muted hover:text-app-text"
                   }`}
@@ -769,7 +812,7 @@ export function LapAnalyse() {
               </div>
 
               <div className="p-2 flex flex-col items-center gap-2 w-full flex-1 min-h-0">
-              {vizMode === "render" ? (
+              {vizMode === "2d" ? (
                 <>
                   {currentPacket && (
                     <div className="flex items-center justify-center gap-2">

@@ -5,6 +5,8 @@ type AnalyseSearch = {
   track?: number;
   car?: number;
   lap?: number;
+  cursor?: number;
+  viz?: string;
 };
 
 export const Route = createFileRoute("/f125/analyse")({
@@ -17,5 +19,7 @@ export const Route = createFileRoute("/f125/analyse")({
     track: search.track ? Number(search.track) : undefined,
     car: search.car ? Number(search.car) : undefined,
     lap: search.lap ? Number(search.lap) : undefined,
+    cursor: search.cursor ? Number(search.cursor) : undefined,
+    viz: typeof search.viz === "string" ? search.viz : undefined,
   }),
 });
