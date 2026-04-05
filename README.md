@@ -28,7 +28,7 @@ It captures telemetry from your racing games, records every lap to a local datab
 - **AI coaching** — send any lap for AI-powered technique, setup, and tire feedback
 - **Vehicle setup** — tune catalog, car browser with performance data
 - **Tune analysis** — compare the fastest tunes/setups and see popular setting ranges across the community
-- **Driver profiles** — multiple profiles, lap export, and aggregate stats
+- **Driver profiles** — multiple profiles, lap export, and aggregate stats like laps completed and distance driven.
 
 ## Supported Games
 
