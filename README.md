@@ -16,7 +16,7 @@
 
 > **Alpha software** — expect bugs, rough edges, and AI analysis that's still being fine-tuned for accuracy. Some features aren't obvious yet, so poke around and join the [Discord](https://discord.gg/ZNXKyYPumT) if you get stuck.
 
-RaceIQ is the most advanced sim racing telemetry app available — and it's completely free. Whether you're chasing lap records, finding fast tunes, or just trying to understand why you're slow through turn 3, RaceIQ gives you tools that simply aren't available anywhere else.
+RaceIQ is the most advanced sim racing telemetry app available to the public — and it's completely free. Whether you're chasing lap records, finding fast tunes, or just trying to understand why you're slow through turn 3, RaceIQ gives you tools that simply aren't available anywhere else.
 
 It captures telemetry from your racing games, records every lap to a local database, and gives you a full dashboard with live data, lap comparison, AI coaching, and 3D visualizations — all running locally on your PC.
 
