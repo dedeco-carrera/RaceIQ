@@ -16,7 +16,7 @@
 
 > **Alpha software** — expect bugs, rough edges, and AI analysis that's still being fine-tuned for accuracy. Some features aren't obvious yet, so poke around and join the [Discord](https://discord.gg/ZNXKyYPumT) if you get stuck.
 
-If you've used Track Titan and the like before, this is for you.
+A free, open-source alternative to [Track Titan](https://tracktitan.io/) and [Coach Dave Delta](https://coachdaveacademy.com/delta/).
 
 RaceIQ is the most advanced sim racing telemetry app available to the public — and it's completely free. Whether you're chasing lap records, finding fast tunes, or just trying to understand why you're slow through turn 3, RaceIQ gives you tools that simply aren't available anywhere else.
 
