@@ -16,9 +16,13 @@
 
 > **Alpha software** — expect bugs, rough edges, and AI analysis that's still being fine-tuned for accuracy. Some features aren't obvious yet, so poke around and join the [Discord](https://discord.gg/ZNXKyYPumT) if you get stuck.
 
+If you've used Track Titan and the like before, this is for you.
+
 RaceIQ is the most advanced sim racing telemetry app available to the public — and it's completely free. Whether you're chasing lap records, finding fast tunes, or just trying to understand why you're slow through turn 3, RaceIQ gives you tools that simply aren't available anywhere else.
 
-It captures telemetry from your racing games, records every lap to a local database, and gives you a full dashboard with live data, lap comparison, AI coaching, and 3D visualizations — all running locally on your PC.
+It captures telemetry from your racing games, provides a live dashboard, records every lap to a local database, and gives you lap analysis and comparison (with optional AI coaching) and 3D visualizations — all running locally on your PC. It also includes a car and setup catalogue so you can browse and compare setups across tracks.
+
+Check out the [demo](https://www.youtube.com/watch?v=hWuIItofivA) and [screenshots](assets/screenshots/) to see it in action.
 
 ## Features
 
