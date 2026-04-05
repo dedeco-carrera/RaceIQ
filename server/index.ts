@@ -89,6 +89,7 @@ function killPort(port: number): void {
 }
 
 killPort(HTTP_PORT);
+console.log("[Boot] Port cleared");
 
 // Start the HTTP/WebSocket server
 const server = Bun.serve<WSData>({
@@ -143,7 +144,6 @@ const server = Bun.serve<WSData>({
 });
 
 console.log(`[Server] HTTP/WS server listening on http://localhost:${HTTP_PORT}`);
-console.log(`[Server] WebSocket endpoint: ws://localhost:${HTTP_PORT}/ws`);
 
 // Start UDP listener — settings.udpPort takes priority, env var is the fallback
 const udpPort = settings.udpPort ?? (Number(process.env.UDP_PORT) || 5301);
