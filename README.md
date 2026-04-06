@@ -57,10 +57,12 @@ Configure your game's telemetry settings to send UDP data to `127.0.0.1:5301`, t
 
 ## Platform
 
-**Windows is required.** RaceIQ runs on the same PC as the game for two reasons:
+**Game on Windows is recommended.** RaceIQ runs on the same PC as the game for two reasons:
 
 - **UDP reliability** — loopback delivery is lossless and low-latency, avoiding the packet loss and timing jitter of network routing.
 - **Shared memory** — some games (like ACC) expose richer telemetry via shared memory, which requires running on the same machine.
+
+**Game on Console works.** Just make sure both your windows machine and console is wired ethernet.
 
 ## Data Storage
 
