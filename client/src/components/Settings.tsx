@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isDevelopment } from "@/lib/env";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
@@ -118,7 +119,7 @@ const NAV_ITEMS = [
   { id: "speed", label: "Units" },
   { id: "sound", label: "Sound" },
   { id: "ai", label: "AI Analysis" },
-  { id: "extraction", label: "Extraction" },
+  { id: "developer", label: "Developer", devOnly: true },
   { id: "updates", label: "Updates" },
   { id: "about", label: "About" },
 ] as const;
@@ -346,12 +347,7 @@ function ExtractionSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-app-text mb-1">Track Extraction</h2>
-      <p className="text-sm text-app-text-muted mb-4">
-        Extract track outlines from your local Forza Motorsport 2023 installation.
-        This reads AI track geometry data to generate precise centerline outlines
-        for every circuit and layout variant.
-      </p>
+      <h2 className="text-lg font-semibold text-app-text mb-4">Forza Motorsport 2023 Extraction</h2>
 
       {!status?.installed && (
         <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 p-3 mb-4">
@@ -459,12 +455,7 @@ function F1ExtractionSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-app-text mb-1">F1 25 Track Extraction</h2>
-      <p className="text-sm text-app-text-muted mb-4">
-        Extract track outlines from your local F1 25 installation.
-        This reads AI spline data to generate centerline outlines,
-        track boundaries, and racing lines for every circuit.
-      </p>
+      <h2 className="text-lg font-semibold text-app-text mb-4">F1 2025 Extraction</h2>
 
       {!status?.installed && (
         <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 p-3 mb-4">
@@ -779,7 +770,7 @@ export function Settings({ initialSection, onClose }: { initialSection?: Section
     <div className="flex h-full">
       {/* Left nav */}
       <nav className="w-48 shrink-0 border-r border-app-border bg-app-surface-alt/50 py-2 flex flex-col">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => !("devOnly" in item) || isDevelopment).map((item) => (
           <button
             key={item.id}
             onClick={() => setActiveSection(item.id)}
@@ -1433,7 +1424,7 @@ export function Settings({ initialSection, onClose }: { initialSection?: Section
         {activeSection === "ai" && (
           <AiSection />
         )}
-        {activeSection === "extraction" && (
+        {activeSection === "developer" && (
           <div className="space-y-8">
             <ExtractionSection />
             <F1ExtractionSection />
