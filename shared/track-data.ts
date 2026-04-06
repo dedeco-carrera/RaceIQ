@@ -3,15 +3,69 @@ import { resolve } from "path";
 import { getTrackSectorsByName, DEFAULT_SECTORS, type TrackSectors } from "./track-sectors";
 import type { NamedSegment } from "./track-named-segments";
 import { GameIdSchema } from "./types";
+import { getF1TrackInfo } from "./f1-track-data";
 
 import { SHARED_DIR, USER_TRACKS_DIR } from "./resolve-data";
 
 /** Writable user track data (extracted, recorded, curbs). */
 const userDir = USER_TRACKS_DIR;
 
-/** Read a file from user game dir. */
+/** FM 2023 ordinal → bundled file prefix, built lazily from tracks.csv. */
+let _fmNamesBuilt = false;
+const fmOrdinalToFileName = new Map<number, string>();
+function ensureFmNames() {
+  if (_fmNamesBuilt) return;
+  _fmNamesBuilt = true;
+  const raw = readDataFile(resolve(SHARED_DIR, "games", "fm-2023", "tracks.csv"));
+  for (const line of (raw ?? "").split("\n")) {
+    const parts = line.trim().split(",");
+    const ordinal = parseInt(parts[0], 10);
+    if (isNaN(ordinal)) continue;
+    const shared = parts[6]?.trim();
+    fmOrdinalToFileName.set(ordinal, shared ? `${shared}-${ordinal}` : `${ordinal}`);
+  }
+}
+
+/** Resolve ordinal to bundled file prefix (e.g. f1: 5 → "monaco", fm: 21 → "silverstone-21"). */
+function getBundledTrackName(gameId: string, ordinal: number): string | undefined {
+  if (gameId === "f1-2025") return getF1TrackInfo(ordinal)?.commonTrackName || undefined;
+  if (gameId === "fm-2023") {
+    ensureFmNames();
+    return fmOrdinalToFileName.get(ordinal);
+  }
+  return undefined;
+}
+
+/** Compute filename for telemetry-averaged centerline (e.g. "silverstone-21-computed-average"). */
+function computedAverageFileName(gameId: string, ordinal: number): string {
+  const name = getBundledTrackName(gameId, ordinal);
+  return name ? `${name}-computed-average` : `${ordinal}-computed-average`;
+}
+
+/** Resolve a bundled file path: strip extracted/ prefix, map ordinal to track name. */
+function toBundledPath(gameId: string, relativePath: string): string | null {
+  let p = relativePath.startsWith("extracted/")
+    ? relativePath.slice("extracted/".length)
+    : relativePath;
+  // Bundled files use track names, not ordinals: boundaries-5.json → monaco-boundaries.json
+  const m = p.match(/^(\w+)-(\d+)\.(json|csv)$/);
+  if (m) {
+    const [, prefix, ordinal, ext] = m;
+    const name = getBundledTrackName(gameId, parseInt(ordinal, 10));
+    if (!name) return null;
+    const kind = prefix === "recorded" ? "centerline" : prefix;
+    return `${name}-${kind}.${ext}`;
+  }
+  return p;
+}
+
+/** Read a file from user game dir first, then fall back to bundled shared dir. */
 function readUserOrBundled(gameId: string, relativePath: string): string | null {
-  return readDataFile(resolve(userDir, gameId, relativePath));
+  const userResult = readDataFile(resolve(userDir, gameId, relativePath));
+  if (userResult !== null) return userResult;
+  const bundledPath = toBundledPath(gameId, relativePath);
+  if (!bundledPath) return null;
+  return readDataFile(resolve(bundledGameDir(gameId), bundledPath));
 }
 
 /** Validate gameId using zod schema. */
@@ -29,10 +83,15 @@ function userGameDir(gameId: string): string {
 }
 
 
-/** Shared track data directory (game-agnostic outlines from real-world circuits). */
-const sharedDir = resolve(SHARED_DIR, "tracks");
-const sharedBoundaryDir = resolve(sharedDir, "boundaries");
-const sharedTracksDir = resolve(sharedDir, "meta");
+/** Bundled extracted track data per game (boundaries, centerlines). */
+function bundledGameDir(gameId: string): string {
+  return resolve(SHARED_DIR, "tracks", gameId);
+}
+
+/** TUMFTM real-world track data (centerlines, boundaries). */
+const tumftmDir = resolve(SHARED_DIR, "tracks", "tumftm");
+/** Shared track metadata (sectors, segments — cross-game). */
+const sharedTracksDir = resolve(SHARED_DIR, "tracks", "meta");
 
 interface SharedTrackMeta {
   name: string;
@@ -62,7 +121,7 @@ export function loadSharedTrackMeta(name: string): SharedTrackMeta | null {
 /** Load a shared outline CSV by name (e.g. "silverstone"). */
 export function loadSharedOutline(name: string): Point[] | null {
   if (!name) return null;
-  const filePath = resolve(sharedDir, `${name}.csv`);
+  const filePath = resolve(tumftmDir, `${name}.csv`);
   const content = readDataFile(filePath);
   if (!content) return null;
   try {
@@ -78,7 +137,7 @@ export function loadSharedOutline(name: string): Point[] | null {
 /** Load shared boundary JSON by name (e.g. "silverstone"). */
 export function loadSharedBoundary(name: string): { leftEdge: Point[]; rightEdge: Point[]; centerLine: Point[]; pitLane: Point[] | null; coordSystem: string } | null {
   if (!name) return null;
-  const filePath = resolve(sharedBoundaryDir, `${name}.json`);
+  const filePath = resolve(tumftmDir, `${name}.json`);
   const content = readDataFile(filePath);
   if (!content) return null;
   try { return JSON.parse(content); } catch { return null; }
@@ -133,16 +192,16 @@ const sourceByName = new Map<string, Source>();
 //   recorded = Captured from in-game telemetry
 const TRACK_FILES: Record<string, TrackOutlineEntry> = {
   // TUMFTM racetrack-database (high quality, ~1000 pts with track widths)
-  "Brand Hatch": { filename: "brands-hatch.csv", source: "tumftm" },
-  "Circuit de Barcelona-Catalunya": { filename: "catalunya.csv", source: "tumftm" },
-  "Circuit de Spa-Francorchamps": { filename: "spa.csv", source: "tumftm" },
-  "Hockenheimring": { filename: "hockenheim.csv", source: "tumftm" },
-  "Indianapolis Motor Speedway": { filename: "indianapolis.csv", source: "tumftm" },
-  "Nürburgring": { filename: "nurburgring.csv", source: "tumftm" },
-  "Silverstone Racing Circuit": { filename: "silverstone.csv", source: "tumftm" },
-  "Suzuka Circuit": { filename: "suzuka.csv", source: "tumftm" },
-  "Yas Marina Circuit": { filename: "yas-marina.csv", source: "tumftm" },
-  "Autodromo Hermanos Rodriguez": { filename: "mexico-city.csv", source: "tumftm" },
+  "Brand Hatch": { filename: "brands-hatch-centerline.csv", source: "tumftm" },
+  "Circuit de Barcelona-Catalunya": { filename: "catalunya-centerline.csv", source: "tumftm" },
+  "Circuit de Spa-Francorchamps": { filename: "spa-centerline.csv", source: "tumftm" },
+  "Hockenheimring": { filename: "hockenheim-centerline.csv", source: "tumftm" },
+  "Indianapolis Motor Speedway": { filename: "indianapolis-centerline.csv", source: "tumftm" },
+  "Nürburgring": { filename: "nurburgring-centerline.csv", source: "tumftm" },
+  "Silverstone Racing Circuit": { filename: "silverstone-centerline.csv", source: "tumftm" },
+  "Suzuka Circuit": { filename: "suzuka-centerline.csv", source: "tumftm" },
+  "Yas Marina Circuit": { filename: "yas-marina-centerline.csv", source: "tumftm" },
+  "Autodromo Hermanos Rodriguez": { filename: "mexico-city-centerline.csv", source: "tumftm" },
 
   // OpenStreetMap Overpass API — removed due to low quality (too few points, GPS artifacts)
   // These tracks will get outlines once recorded from in-game telemetry.
@@ -199,7 +258,7 @@ function ensureIndex() {
 
   // Check which bundled outlines exist on disk
   for (const [trackName, entry] of Object.entries(TRACK_FILES)) {
-    const filePath = resolve(sharedDir, entry.filename);
+    const filePath = resolve(tumftmDir, entry.filename);
     if (existsSync(filePath)) {
       availableOutlineNames.add(trackName);
       sourceByName.set(trackName, entry.source);
@@ -208,12 +267,12 @@ function ensureIndex() {
 
   // Check which boundary files exist
   const allBoundaryFiles = [
-    ...listDataFiles(sharedBoundaryDir, (f) => f.endsWith(".json")),
+    ...listDataFiles(tumftmDir, (f) => f.endsWith("-boundaries.json")),
   ];
   for (const filePath of allBoundaryFiles) {
-    const baseName = filePath.split("/").pop()!.replace(".json", "");
+    const baseName = filePath.split("/").pop()!.replace("-boundaries.json", "");
     for (const [trackName, entry] of Object.entries(TRACK_FILES)) {
-      if (entry.filename.replace(".csv", "") === baseName) {
+      if (entry.filename.replace("-centerline.csv", "") === baseName) {
         availableBoundaryNames.add(trackName);
         break;
       }
@@ -282,7 +341,7 @@ function loadOutlineByName(trackName: string): Point[] | null {
   if (outlineCache.has(trackName)) return outlineCache.get(trackName)!;
   const entry = TRACK_FILES[trackName as keyof typeof TRACK_FILES];
   if (!entry) return null;
-  const content = readDataFile(resolve(sharedDir, entry.filename));
+  const content = readDataFile(resolve(tumftmDir, entry.filename));
   if (!content) return null;
   try {
     const lines = content.split("\n").filter(Boolean);
@@ -316,8 +375,8 @@ function loadBoundaryByName(trackName: string): TrackBoundary | null {
   if (boundaryCache.has(trackName)) return boundaryCache.get(trackName)!;
   const entry = TRACK_FILES[trackName as keyof typeof TRACK_FILES];
   if (!entry) return null;
-  const baseName = entry.filename.replace(".csv", "");
-  const sharedPath = resolve(sharedBoundaryDir, `${baseName}.json`);
+  const baseName = entry.filename.replace("-centerline.csv", "");
+  const sharedPath = resolve(tumftmDir, `${baseName}-boundaries.json`);
   const content = readDataFile(sharedPath);
   if (!content) return null;
   try {
@@ -375,8 +434,8 @@ function ensureOrdinals() {
     if (isNaN(ordinal) || !name) continue;
 
     ordinalToTrackName.set(ordinal, name);
-    const sharedOutline = parts[6]?.trim();
-    if (sharedOutline) ordinalToSharedOutline.set(ordinal, sharedOutline);
+    const commonTrackName = parts[6]?.trim();
+    if (commonTrackName) ordinalToSharedOutline.set(ordinal, commonTrackName);
 
     const outlineLen = OUTLINE_LENGTH_KM[name];
     const excluded = outlineLen != null && !isNaN(lengthKm) && lengthKm > 0
@@ -403,23 +462,22 @@ let _recordedScanned = false;
 export function scanRecordedFiles(): void {
   _recordedScanned = true;
   recordedOrdinals.clear();
-  // Scan user data directory for recorded and extracted outlines
-  for (const gid of ["fm-2023", "f1-2025"]) {
-    for (const subdir of ["", "extracted"]) {
-      const dir = resolve(userDir, gid, subdir);
-      if (!existsSync(dir)) continue;
-      for (const filePath of listDataFiles(dir, (f) => f.startsWith("recorded-") && f.endsWith(".csv"))) {
-        const match = filePath.split("/").pop()!.match(/recorded-(\d+)\.csv/);
-        if (match) recordedOrdinals.add(gk(gid, parseInt(match[1], 10)));
-      }
+  for (const gid of ["fm-2023", "f1-2025", "acc"]) {
+    const dir = resolve(userDir, gid);
+    if (!existsSync(dir)) continue;
+    for (const filePath of listDataFiles(dir, (f) => f.endsWith("-computed-average.csv"))) {
+      const m = filePath.split("/").pop()!.match(/-(\d+)-computed-average\.csv$/);
+      if (m) recordedOrdinals.add(gk(gid, parseInt(m[1], 10)));
     }
   }
 }
 function ensureRecordedScanned() { if (!_recordedScanned) scanRecordedFiles(); }
 
-/** Check if an extracted (game-file) outline exists on disk for this track. */
+/** Check if a game-extracted centerline exists (user-extracted or bundled). */
 function hasExtractedOutline(ordinal: number, gameId: string): boolean {
-  return existsSync(resolve(userGameDir(gameId), "extracted", `recorded-${ordinal}.csv`));
+  const name = getBundledTrackName(gameId, ordinal);
+  if (name && existsSync(resolve(bundledGameDir(gameId), `${name}-centerline.csv`))) return true;
+  return false;
 }
 
 function loadRecordedOutline(ordinal: number, gameId: string): Point[] | null {
@@ -427,9 +485,9 @@ function loadRecordedOutline(ordinal: number, gameId: string): Point[] | null {
   const key = gk(gameId, ordinal);
   if (recordedOutlines.has(key)) return recordedOutlines.get(key)!;
   if (!recordedOrdinals.has(key)) return null;
-  const userPath = resolve(userGameDir(gameId), `recorded-${ordinal}.csv`);
-  const userExtracted = resolve(userGameDir(gameId), "extracted", `recorded-${ordinal}.csv`);
-  const content = readDataFile(userPath) ?? readDataFile(userExtracted);
+  const caName = computedAverageFileName(gameId, ordinal);
+  const userPath = resolve(userGameDir(gameId), `${caName}.csv`);
+  const content = readDataFile(userPath);
   if (!content) return null;
   try {
     const lines = content.split("\n").filter(Boolean);
@@ -578,7 +636,9 @@ function applyAlignment(p: Point, a: { scale: number; cos: number; sin: number; 
 /** Load extracted boundary data, aligned to telemetry coordinate space if possible. */
 function loadExtractedBoundary(ordinal: number, gameId: string): TrackBoundary | null {
   const userExtracted = resolve(userGameDir(gameId), "extracted", `boundaries-${ordinal}.json`);
-  const content = readDataFile(userExtracted);
+  const trackName = getBundledTrackName(gameId, ordinal);
+  const bundledFile = trackName ? resolve(bundledGameDir(gameId), `${trackName}-boundaries.json`) : null;
+  const content = readDataFile(userExtracted) ?? (bundledFile ? readDataFile(bundledFile) : null);
   if (!content) return null;
   try {
     const data = JSON.parse(content);
@@ -590,7 +650,8 @@ function loadExtractedBoundary(ordinal: number, gameId: string): TrackBoundary |
     // If alignment was poor, transform boundaries to match telemetry outline
     if (!data.aligned) {
       const extContent = readUserOrBundled(gameId, `extracted/recorded-${ordinal}.csv`);
-      const telContent = readUserOrBundled(gameId, `recorded-${ordinal}.csv`);
+      const caName = computedAverageFileName(gameId, ordinal);
+      const telContent = readDataFile(resolve(userGameDir(gameId), `${caName}.csv`));
       if (extContent && telContent) {
         const parseCSV = (c: string) => c.split("\n").filter(Boolean).slice(1).map(l => { const [x, z] = l.split(",").map(Number); return { x, z }; });
         const extCenter = parseCSV(extContent);
@@ -787,23 +848,41 @@ export function recordLapTrace(ordinal: number, trace: Point[], startLinePos: Po
   recordedOutlines.set(key, outline);
 
   if (shouldSave) {
-    const filePath = resolve(userGameDir(gameId), `recorded-${ordinal}.csv`);
+    const caName = computedAverageFileName(gameId, ordinal);
+    const filePath = resolve(userGameDir(gameId), `${caName}.csv`);
     try {
       writeFileSync(filePath, "x,z\n" + outline.map((p) => `${p.x},${p.z}`).join("\n"));
-      console.log(`[Tracks] Saved recorded outline for track ${ordinal} (${outline.length} pts, lap ${count})`);
+      console.log(`[Tracks] Saved ${caName} (${outline.length} pts, lap ${count})`);
     } catch (err) {
       console.error(`[Tracks] Failed to save recorded outline:`, err);
     }
   }
 }
 
+/** Load bundled game-extracted centerline CSV by ordinal. */
+function loadBundledCenterline(ordinal: number, gameId: string): Point[] | null {
+  const name = getBundledTrackName(gameId, ordinal);
+  if (!name) return null;
+  const filePath = resolve(bundledGameDir(gameId), `${name}-centerline.csv`);
+  const content = readDataFile(filePath);
+  if (!content) return null;
+  try {
+    const lines = content.split("\n").filter(Boolean);
+    const data: Point[] = lines.slice(1).map((l) => {
+      const [x, z] = l.split(",").map(Number);
+      return { x, z };
+    });
+    return data.length > 10 ? data : null;
+  } catch { return null; }
+}
+
 /**
- * Get outline for a track. Prefers recorded data, then shared, then bundled.
+ * Get centerline for a track. Priority: bundled game data → computed average → TUMFTM.
  * sharedName: optional shared outline file name (e.g. "silverstone") for cross-game tracks.
  */
 export function getTrackOutlineByOrdinal(ordinal: number, gameId: string, sharedName?: string): Point[] | null {
   validateGameId(gameId);
-  return loadRecordedOutline(ordinal, gameId) ?? loadSharedOutline(sharedName ?? "") ?? getBundledOutlineByOrdinal(ordinal);
+  return loadBundledCenterline(ordinal, gameId) ?? loadRecordedOutline(ordinal, gameId) ?? loadSharedOutline(sharedName ?? "") ?? getBundledOutlineByOrdinal(ordinal);
 }
 
 export function hasRecordedOutline(ordinal: number, gameId: string): boolean {
@@ -838,7 +917,7 @@ export function getStartYaw(ordinal: number, gameId: string): number | null {
 }
 
 /**
- * Delete a recorded outline for a track (resets to bundled or no outline).
+ * Delete a computed-average outline for a track (resets to bundled or no outline).
  */
 export function deleteRecordedOutline(ordinal: number, gameId: string): boolean {
   validateGameId(gameId);
@@ -850,17 +929,13 @@ export function deleteRecordedOutline(ordinal: number, gameId: string): boolean 
   startLinePositions.delete(key);
   startLineYaws.delete(key);
 
-  // Delete the file on disk — user data dir
-  const filePath = resolve(userGameDir(gameId), `recorded-${ordinal}.csv`);
+  const { unlinkSync } = require("fs");
+  const caName = computedAverageFileName(gameId, ordinal);
+  const filePath = resolve(userGameDir(gameId), `${caName}.csv`);
   if (existsSync(filePath)) {
-    try {
-      const { unlinkSync } = require("fs");
-      unlinkSync(filePath);
-      console.log(`[Tracks] Deleted recorded outline for track ${ordinal}`);
-    } catch (err) {
-      console.error(`[Tracks] Failed to delete recorded outline file:`, err);
-    }
+    try { unlinkSync(filePath); } catch {}
   }
+  if (had) console.log(`[Tracks] Deleted computed average for track ${ordinal}`);
   return had;
 }
 

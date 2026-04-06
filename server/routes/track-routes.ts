@@ -12,8 +12,6 @@ import {
   getTrackOutline as getDbTrackOutline,
   getTrackOutlineSectors,
   updateTrackOutlineSectors,
-  getTrackOutlineMetadata,
-  saveTrackOutline,
 } from "../db/queries";
 import {
   getTrackOutlineByOrdinal,
@@ -30,9 +28,8 @@ import {
   loadSharedOutline,
   loadSharedBoundary,
   loadSharedTrackMeta,
-  getTrackSource,
+  recordLapTrace,
   getTrackAltitudeByOrdinal,
-  loadExtractedSegments,
 } from "../../shared/track-data";
 import { trackMap, getCarName, getTrackName } from "../../shared/car-data";
 import { detectCorners, type Corner } from "../corner-detection";
@@ -41,7 +38,6 @@ import {
   normalizeToFixedPoints,
   averageOutlines,
   smoothOutline,
-  computeSectorsFromGeometry,
 } from "../lap-detector";
 import {
   getCalibrationStatus,
@@ -53,11 +49,10 @@ import {
 } from "../track-calibration";
 import { getF1Tracks } from "../../shared/f1-track-data";
 import { getAccTracks } from "../../shared/acc-track-data";
-import { namedSegments } from "../../shared/track-named-segments";
 import { tryGetServerGame } from "../games/registry";
 import { tryGetGame } from "../../shared/games/registry";
 import { GameIdSchema, type GameId } from "../../shared/types";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
+import { existsSync, writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 
 // ─── Param schemas ──────────────────────────────────────────────────────────
@@ -96,55 +91,7 @@ function getSharedTrackName(ordinal: number, gameId?: string): string | undefine
 
 // ─── Track data file persistence ────────────────────────────────────────────
 
-import { USER_TRACKS_DIR } from "../paths";
-const TRACK_DATA_DIR = resolve(USER_TRACKS_DIR, "tracks");
-const userSegmentsStore: Map<number, any[]> = new Map();
-
-// Load user segments from track data files on startup
-if (existsSync(TRACK_DATA_DIR)) {
-  try {
-    for (const file of readdirSync(TRACK_DATA_DIR)) {
-      if (!file.endsWith(".json")) continue;
-      const ordinal = parseInt(file.replace(".json", ""), 10);
-      if (isNaN(ordinal)) continue;
-      const filePath = resolve(TRACK_DATA_DIR, `${ordinal}.json`);
-      const data = JSON.parse(readFileSync(filePath, "utf-8"));
-      if (data?.segments && Array.isArray(data.segments)) {
-        userSegmentsStore.set(ordinal, data.segments);
-      }
-    }
-  } catch {}
-}
-
-function loadTrackDataFile(ordinal: number): { outline?: any[]; segments?: any[] } | null {
-  const filePath = resolve(TRACK_DATA_DIR, `${ordinal}.json`);
-  if (!existsSync(filePath)) return null;
-  try {
-    return JSON.parse(readFileSync(filePath, "utf-8"));
-  } catch { return null; }
-}
-
-function saveTrackDataFile(ordinal: number, updates: { outline?: { x: number; z: number }[]; segments?: any[]; sectors?: { s1End: number; s2End: number } }) {
-  try {
-    if (!existsSync(TRACK_DATA_DIR)) mkdirSync(TRACK_DATA_DIR, { recursive: true });
-    const trackInfo = trackMap.get(ordinal);
-    const name = trackInfo?.name ?? `Track ${ordinal}`;
-
-    // Merge with existing data
-    const existing = loadTrackDataFile(ordinal) ?? {};
-    const payload: any = { name, ordinal, ...existing, ...updates };
-    if (updates.outline) payload.points = updates.outline.length;
-
-    writeFileSync(resolve(TRACK_DATA_DIR, `${ordinal}.json`), JSON.stringify(payload, null, 2));
-    console.log(`[Track] Saved track data for ${name} (${ordinal})`);
-  } catch (e) {
-    console.error("[Track] Failed to save track data:", e);
-  }
-}
-
-function saveUserSegmentsForTrack(ordinal: number, segments: any[]) {
-  saveTrackDataFile(ordinal, { segments });
-}
+import { SHARED_DIR } from "../../shared/resolve-data";
 
 // ─── Boundary helpers ───────────────────────────────────────────────────────
 
@@ -347,7 +294,6 @@ export const trackRoutes = new Hono()
       const updated = updateTrackOutlineSectors(ordinal, { s1End, s2End }, requireGameId(c));
       if (!updated) return c.json({ error: "No outline found for track" }, 404);
 
-      saveTrackDataFile(ordinal, { sectors: { s1End, s2End } });
       return c.json({ success: true, s1End, s2End });
     }
   )
@@ -361,8 +307,7 @@ export const trackRoutes = new Hono()
         // Return F1 tracks
         const f1Tracks = getF1Tracks();
         const tracks = Array.from(f1Tracks.entries()).map(([id, info]) => {
-          const hasExtracted = sharedHasRecordedOutline(id, "f1-2025");
-          const hasShared = !!info.sharedOutline && !!loadSharedOutline(info.sharedOutline);
+          const hasBundled = !!getTrackOutlineByOrdinal(id, "f1-2025", info.commonTrackName);
           return {
             ordinal: id,
             name: info.name,
@@ -370,9 +315,9 @@ export const trackRoutes = new Hono()
             country: info.country,
             variant: info.variant,
             lengthKm: info.lengthKm,
-            hasOutline: hasExtracted || hasShared,
-            outlineSource: hasExtracted ? "extracted" : hasShared ? "tumftm" : null,
-            sharedOutline: info.sharedOutline || null,
+            hasOutline: hasBundled,
+            outlineSource: hasBundled ? "bundled" : null,
+            commonTrackName: info.commonTrackName || null,
             createdAt: null,
           };
         });
@@ -384,7 +329,7 @@ export const trackRoutes = new Hono()
         const accTracks = getAccTracks();
         const tracks = Array.from(accTracks.entries()).map(([id, info]) => {
           const hasExtracted = hasTrackOutline(id, "acc") || sharedHasRecordedOutline(id, "acc");
-          const hasShared = !!info.sharedOutline && !!loadSharedOutline(info.sharedOutline);
+          const hasShared = !!info.commonTrackName && !!loadSharedOutline(info.commonTrackName);
           return {
             ordinal: id,
             name: info.name,
@@ -402,11 +347,9 @@ export const trackRoutes = new Hono()
       }
 
       // Default: Forza tracks
+      const forzaGameId = gameId ?? "fm-2023";
       const tracks = Array.from(trackMap.entries()).map(([ordinal, info]) => {
-        const hasOutlineVal = gameId ? (hasTrackOutline(ordinal, gameId) || sharedHasRecordedOutline(ordinal, gameId)) : false;
-        const metadata = hasOutlineVal && gameId ? getTrackOutlineMetadata(ordinal, requireGameId(c)) : null;
-        const recorded = gameId ? sharedHasRecordedOutline(ordinal, gameId) : false;
-        const source = recorded ? "recorded" : getTrackSource(info.name);
+        const hasBundled = !!getTrackOutlineByOrdinal(ordinal, forzaGameId);
         return {
           ordinal,
           name: info.name,
@@ -414,9 +357,9 @@ export const trackRoutes = new Hono()
           country: info.country,
           variant: info.variant,
           lengthKm: info.lengthKm,
-          hasOutline: hasOutlineVal,
-          outlineSource: hasOutlineVal ? source : null,
-          createdAt: metadata?.createdAt ?? null,
+          hasOutline: hasBundled,
+          outlineSource: hasBundled ? "bundled" : null,
+          createdAt: null,
         };
       });
       // Sort: tracks with outlines first, then alphabetically
@@ -428,19 +371,34 @@ export const trackRoutes = new Hono()
     }
   )
 
-  // PUT /api/tracks/:trackOrdinal/segments — save user-edited segments (dev only)
+  // PUT /api/tracks/:trackOrdinal/segments — save segments to shared meta (dev only)
   .put("/api/tracks/:trackOrdinal/segments",
     zValidator("param", TrackOrdinalParamSchema),
+    zValidator("query", GameIdQuerySchema),
     async (c) => {
       if (!IS_DEV) return c.json({ error: "Not available in production" }, 403);
       const { trackOrdinal } = c.req.valid("param");
+      const gameId = c.req.query("gameId");
 
       const body = await c.req.json();
       if (!body.segments || !Array.isArray(body.segments)) {
         return c.json({ error: "segments array required" }, 400);
       }
-      userSegmentsStore.set(trackOrdinal, body.segments);
-      saveUserSegmentsForTrack(trackOrdinal, body.segments);
+
+      // Resolve shared track name for the meta file
+      const sharedName = getSharedTrackName(trackOrdinal, gameId);
+      if (!sharedName) {
+        return c.json({ error: "No shared track name for this ordinal" }, 400);
+      }
+
+      // Update shared meta file with segments
+      const meta = loadSharedTrackMeta(sharedName) ?? { name: sharedName };
+      (meta as any).segments = body.segments;
+      const metaDir = resolve(SHARED_DIR, "tracks", "meta");
+      if (!existsSync(metaDir)) mkdirSync(metaDir, { recursive: true });
+      writeFileSync(resolve(metaDir, `${sharedName}.json`), JSON.stringify(meta, null, 2));
+      console.log(`[Track] Saved segments for ${sharedName} (${body.segments.length} segments)`);
+
       return c.json({ success: true, count: body.segments.length });
     }
   )
@@ -453,41 +411,9 @@ export const trackRoutes = new Hono()
     (c) => {
       const { ordinal } = c.req.valid("param");
       const gameId = c.req.query("gameId");
-      const forceSource = c.req.query("source");
       const sharedName = getSharedTrackName(ordinal, gameId);
 
-      // If ?source=extracted, return only game-extracted segments
-      if (forceSource === "extracted") {
-        const segs = loadExtractedSegments(ordinal, parseGameId(c));
-        if (segs && segs.length > 0) {
-          return c.json({ segments: segs.map((s) => ({ ...s, startIdx: 0, endIdx: 0, distStart: 0, distEnd: 0 })), totalDist: 0, source: "extracted" });
-        }
-        return c.json({ segments: [], totalDist: 0, source: "extracted" });
-      }
-
-      // 1. User-edited segments (highest priority)
-      const userSegs = userSegmentsStore.get(ordinal);
-      if (userSegs && userSegs.length > 0) {
-        return c.json({ segments: userSegs, totalDist: 0, source: "user" });
-      }
-
-      // 2. Extracted Track.seg segments (game-authoritative corner/straight data)
-      const extractedSegs = loadExtractedSegments(ordinal, parseGameId(c));
-      if (extractedSegs && extractedSegs.length > 0) {
-        return c.json({
-          segments: extractedSegs.map((s) => ({
-            ...s,
-            startIdx: 0,
-            endIdx: 0,
-            distStart: 0,
-            distEnd: 0,
-          })),
-          totalDist: 0,
-          source: "extracted",
-        });
-      }
-
-      // 3. Shared track segments (cross-game enrichment)
+      // 1. Shared track meta segments (curated, cross-game)
       const sharedMeta = sharedName ? loadSharedTrackMeta(sharedName) : null;
       if (sharedMeta?.segments && sharedMeta.segments.length > 0) {
         return c.json({
@@ -501,27 +427,6 @@ export const trackRoutes = new Hono()
           totalDist: 0,
           source: "shared",
         });
-      }
-
-      // 3. Hand-curated named segments from code (legacy, Forza track names only)
-      if (!gameId || gameId === "fm-2023") {
-        const trackInfo = trackMap.get(ordinal);
-        if (trackInfo) {
-          const named = namedSegments[trackInfo.name];
-          if (named) {
-            return c.json({
-              segments: named.map((s) => ({
-                ...s,
-                startIdx: 0,
-                endIdx: 0,
-                distStart: 0,
-                distEnd: 0,
-              })),
-              totalDist: 0,
-              source: "named",
-            });
-          }
-        }
       }
 
       // Fall back to auto-detection from outline curvature
@@ -679,11 +584,8 @@ export const trackRoutes = new Hono()
         // Light smoothing to clean up noise while preserving shape
         let outline = smoothOutline(raw, 5);
 
-        const singleLapGameId = requireGameId(c);
-        const sectors = computeSectorsFromGeometry(outline);
-        saveTrackOutline(trackOrdinal, outline, singleLapGameId, sectors);
-        saveTrackDataFile(trackOrdinal, { outline });
-
+        const recomputeGameId = requireGameId(c);
+        recordLapTrace(trackOrdinal, outline, null, null, recomputeGameId);
         return c.json({
           success: true,
           lapsUsed: 1,
@@ -755,11 +657,8 @@ export const trackRoutes = new Hono()
         }
       }
 
-      const multiLapGameId = requireGameId(c);
-      const sectors = computeSectorsFromGeometry(outline);
-      saveTrackOutline(trackOrdinal, outline, multiLapGameId, sectors);
-      saveTrackDataFile(trackOrdinal, { outline });
-
+      const recomputeGameId = requireGameId(c);
+      recordLapTrace(trackOrdinal, outline, null, null, recomputeGameId);
       return c.json({
         success: true,
         lapsUsed: normalized.length,
@@ -938,18 +837,19 @@ export const trackRoutes = new Hono()
       const startYaw = gameId ? getStartYaw(ordinal, gameId) : null;
       const altitude = getTrackAltitudeByOrdinal(ordinal);
 
-      // 1. Recorded/extracted outlines (telemetry-recorded preferred over extracted in the module)
-      if (gameId && sharedHasRecordedOutline(ordinal, gameId)) {
-        return c.json({ points: getTrackOutlineByOrdinal(ordinal, gameId, sharedName), recorded: true, source: "extracted", startYaw, ...(altitude && { altitude }) });
+      // Try all sources: bundled game data → computed average → DB → TUMFTM
+      if (gameId) {
+        const outline = getTrackOutlineByOrdinal(ordinal, gameId, sharedName);
+        if (outline) return c.json({ points: outline, recorded: true, source: "bundled", startYaw, ...(altitude && { altitude }) });
       }
 
-      // 2. DB-recorded outlines
+      // DB-recorded outlines (legacy/ACC)
       if (gameId) {
         const dbOutline = getDbTrackOutline(ordinal, gameId as GameId);
         if (dbOutline) return c.json({ points: dbOutline, recorded: true, source: "recorded", startYaw, ...(altitude && { altitude }) });
       }
 
-      // 3. Shared outlines (cross-game TUMFTM) — fallback for display when no game-extracted outline
+      // Shared outlines (cross-game TUMFTM) — fallback
       if (sharedName) {
         const shared = loadSharedOutline(sharedName);
         if (shared) return c.json({ points: shared, recorded: false, source: "tumftm", startYaw });
