@@ -6,11 +6,11 @@ import { useTelemetryStore } from "../stores/telemetry";
 import { ThemeProvider } from "../context/theme";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { Settings } from "../components/Settings";
+import { UpdateModal } from "../components/UpdateModal";
 import { isOnboardingComplete } from "../components/Onboarding";
 import { ProfileSwitcher } from "../components/ProfileSwitcher";
 import { Button } from "@/components/ui/button";
 import { getAllGames } from "@shared/games/registry";
-import { client } from "../lib/rpc";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,14 +39,7 @@ function getGamePrefixes() {
 }
 
 function useUpdateCheck() {
-  const [state, setState] = useState<{ updateAvailable: boolean; current: string; latest: string | null } | null>(null);
-  useEffect(() => {
-    client.api.version.$get()
-      .then((r) => r.json())
-      .then((d) => setState({ updateAvailable: d.updateAvailable, current: d.current, latest: d.latest }))
-      .catch(() => {});
-  }, []);
-  return state;
+  return useTelemetryStore((s) => s.versionInfo);
 }
 
 function RootLayout() {
@@ -56,7 +49,19 @@ function RootLayout() {
   const updateState = useUpdateCheck();
 
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"about" | undefined>(undefined);
+  const [settingsSection, setSettingsSection] = useState<"updates" | "about" | undefined>(undefined);
+  const [showUpdateModal, setShowUpdateModal] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("update")) {
+      // Clean up the URL
+      params.delete("update");
+      const clean = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (clean ? `?${clean}` : ""));
+      return true;
+    }
+    return false;
+  });
+  const updateProgress = useTelemetryStore((s) => s.updateProgress);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -64,6 +69,7 @@ function RootLayout() {
     if (!isOnboardingComplete() && !location.pathname.startsWith("/onboarding")) {
       navigate({ to: "/onboarding" });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   // Determine which game-specific tabs to show based on current route
@@ -132,9 +138,9 @@ function RootLayout() {
             </div>
 
             <div className="flex items-center gap-2 mr-2">
-              {updateState?.updateAvailable && !showSettings && (
+              {updateState?.updateAvailable && (
                 <button
-                  onClick={() => { setSettingsSection("about"); setShowSettings(true); }}
+                  onClick={() => setShowUpdateModal(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-400/15 text-yellow-400 border border-yellow-400/30 hover:bg-yellow-400/25 transition-colors"
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
@@ -173,6 +179,10 @@ function RootLayout() {
                 </div>
               </div>
             </div>
+          )}
+
+          {(showUpdateModal || updateProgress) && (
+            <UpdateModal version={updateState?.latest ?? "?"} newReleases={updateState?.newReleases ?? []} onClose={() => setShowUpdateModal(false)} />
           )}
 
           <div className={`min-h-0 overflow-y-auto ${location.pathname === "/onboarding" ? "h-full" : ""}`}>

@@ -1,6 +1,15 @@
 import { useEffect, useRef } from "react";
 import type { TelemetryPacket } from "@shared/types";
 import { useTelemetryStore } from "../stores/telemetry";
+import type { VersionInfo } from "../stores/telemetry";
+import { client } from "../lib/rpc";
+
+function fetchVersionInfo() {
+  client.api.version.$get()
+    .then((r) => r.json())
+    .then((d) => useTelemetryStore.getState().setVersionInfo(d as unknown as VersionInfo))
+    .catch(() => {});
+}
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -23,16 +32,23 @@ export function useWebSocket() {
       // Read store actions via getState() — stable, no dependency issues
       const store = useTelemetryStore.getState();
 
-      ws.onopen = () => store.setConnected(true);
+      ws.onopen = () => {
+        // setConnected handles reconnecting → complete transition internally
+        store.setConnected(true);
+        fetchVersionInfo();
+      };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "status") {
-            const { type: _, ...status } = data;
+            const { type: __ignored, ...status } = data; // eslint-disable-line @typescript-eslint/no-unused-vars
             useTelemetryStore.getState().setServerStatus(status);
           } else if (data.type === "update-available") {
             useTelemetryStore.getState().setUpdateAvailable(data.version as string);
+            fetchVersionInfo();
+          } else if (data.type === "update-progress") {
+            useTelemetryStore.getState().setUpdateProgress({ stage: data.stage, percent: data.percent ?? 0 });
           } else {
             const { _sectors, _pit, ...packet } = data;
             const s = useTelemetryStore.getState();
@@ -50,6 +66,12 @@ export function useWebSocket() {
         const s = useTelemetryStore.getState();
         s.setConnected(false);
         s.setServerStatus(null);
+        // If update was in progress, transition to reconnecting stage
+        // Covers both "installing" and "downloading" (race: server may exit before WS "installing" message arrives)
+        const stage = s.updateProgress?.stage;
+        if (stage === "installing" || stage === "downloading") {
+          s.setUpdateProgress({ stage: "reconnecting", percent: 100 });
+        }
         wsRef.current = null;
         reconnectTimeoutRef.current = setTimeout(connect, 1000);
       };

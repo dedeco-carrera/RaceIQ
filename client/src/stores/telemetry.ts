@@ -10,6 +10,10 @@ export interface DisplaySettings {
   aiProvider: "claude-cli" | "gemini";
   aiModel: string;
   wsRefreshRate: string;
+  /** Server-injected: current UDP port */
+  udpPort?: number;
+  /** Server-injected: whether a Gemini API key is stored */
+  geminiApiKeySet?: boolean;
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -21,6 +25,23 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   aiModel: "",
   wsRefreshRate: "60",
 };
+
+export interface ReleaseInfo {
+  version: string;
+  notes: string;
+  date: string;
+}
+
+export interface VersionInfo {
+  current: string;
+  latest: string | null;
+  updateAvailable: boolean;
+  newReleases: ReleaseInfo[];
+  currentReleaseNotes: string | null;
+  currentReleaseDate: string | null;
+  lastChecked: string | null;
+  checked: boolean;
+}
 
 export interface ServerStatus {
   udpPps: number;
@@ -54,6 +75,10 @@ interface TelemetryState {
   unitSystem: "metric" | "imperial";
   /** Version string if a server update is available, null otherwise */
   updateAvailable: string | null;
+  /** Update progress tracking */
+  updateProgress: { stage: "downloading" | "installing" | "reconnecting" | "complete"; percent: number } | null;
+  /** Cached version info from /api/version */
+  versionInfo: VersionInfo | null;
   setConnected: (connected: boolean) => void;
   setPacket: (packet: TelemetryPacket) => void;
   setSectors: (sectors: LiveSectorData) => void;
@@ -62,6 +87,8 @@ interface TelemetryState {
   setPacketsPerSec: (pps: number) => void;
   setServerStatus: (status: ServerStatus | null) => void;
   setUpdateAvailable: (version: string | null) => void;
+  setUpdateProgress: (progress: TelemetryState["updateProgress"]) => void;
+  setVersionInfo: (info: VersionInfo) => void;
   /** Update unit system — re-converts current packet */
   setUnitSystem: (unit: "metric" | "imperial") => void;
 }
@@ -82,7 +109,15 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   lastUdpAt: 0,
   unitSystem: "metric",
   updateAvailable: null,
-  setConnected: (connected) => set({ connected }),
+  updateProgress: null,
+  versionInfo: null,
+  setConnected: (connected) => set((prev) => {
+    // Detect reconnection after update install
+    if (connected && prev.updateProgress?.stage === "reconnecting") {
+      return { connected, updateProgress: { stage: "complete", percent: 100 }, updateAvailable: null };
+    }
+    return { connected };
+  }),
   setSectors: (sectors) => set({ sectors }),
   setPit: (pit) => set({ pit }),
   setPacket: (raw) => {
@@ -105,6 +140,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     isRaceOn: false,
   }),
   setUpdateAvailable: (version) => set({ updateAvailable: version }),
+  setUpdateProgress: (progress) => set({ updateProgress: progress }),
+  setVersionInfo: (info) => set({ versionInfo: info }),
   setUnitSystem: (unit) => {
     const { rawPacket } = get();
     set({

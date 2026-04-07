@@ -5,11 +5,10 @@ import { resolve } from "path";
 import { lapDetector } from "../lap-detector";
 import { wsManager } from "../ws";
 import { USER_TRACKS_DIR } from "../paths";
-import { getUpdateState, startUpdateCheckSchedule, checkForUpdate, applyUpdate, cleanupOldExe } from "../update-check";
+import { getUpdateState, startUpdateCheckSchedule, checkForUpdate, applyUpdate } from "../update-check";
 
-// Check for updates on startup and then once per day
+// Check for updates on startup and then every 4 hours
 startUpdateCheckSchedule();
-cleanupOldExe();
 import {
   findForzaInstall,
   parseForzaZip,
@@ -303,7 +302,7 @@ export const miscRoutes = new Hono()
   // POST /api/update/apply — download and apply the pending update, then restart
   .post("/api/update/apply", async (c) => {
     try {
-      applyUpdate(); // starts async; process will exit after download
+      await applyUpdate(); // starts download, spawns swap script, then process exits
       return new Response(null, { status: 204 });
     } catch (e: any) {
       return c.json({ error: e.message }, 400);

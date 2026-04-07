@@ -55,9 +55,7 @@ $updateItem = New-Object System.Windows.Forms.ToolStripMenuItem
 $updateItem.Text = "Install Update"
 $updateItem.Visible = $false
 $updateItem.add_Click({
-  try {
-    Invoke-WebRequest -Uri "http://localhost:${port}/api/update/apply" -Method POST -UseBasicParsing | Out-Null
-  } catch {}
+  Start-Process "http://localhost:${port}?update=1"
 })
 $menu.Items.Add($updateItem) | Out-Null
 
@@ -92,11 +90,19 @@ $timer.add_Tick({
         $tray.BalloonTipText = "RaceIQ v$ver is available. Click to install."
         $tray.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
         $tray.ShowBalloonTip(5000)
+        $script:updateVersion = $ver
       }
     } catch {}
   }
 })
 $timer.Start()
+
+$script:updateVersion = $null
+$tray.add_BalloonTipClicked({
+  if ($script:updateVersion) {
+    Start-Process "http://localhost:${port}?update=1"
+  }
+})
 
 [System.Windows.Forms.Application]::Run()
 `.trimStart();

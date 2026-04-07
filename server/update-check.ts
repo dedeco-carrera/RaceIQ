@@ -1,5 +1,6 @@
-import { writeFileSync, unlinkSync, existsSync } from "fs";
-import { join, dirname } from "path";
+import { writeFileSync, existsSync, readdirSync } from "fs";
+import { join, resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import { spawn } from "child_process";
 import pkg from "../package.json";
@@ -9,11 +10,45 @@ const VERSION = pkg.version;
 const GITHUB_REPO = "SpeedHQ/RaceIQ";
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
+// Dev/test overrides:
+// LOCAL_INSTALLER=path/to/RaceIQ-Setup.exe — skip download, use local installer
+// DEV_FORCE_UPDATE=1 — pretend an update is available (version 99.0.0)
+// In dev mode, auto-detect installer in project root (e.g. RaceIQ-Setup-v0.3.2.exe)
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+function findLocalInstaller(): string | undefined {
+  if (process.env.LOCAL_INSTALLER) return process.env.LOCAL_INSTALLER;
+  if (process.env.NODE_ENV === "production") return undefined;
+  try {
+    const match = readdirSync(PROJECT_ROOT).find((f) => /^RaceIQ-Setup.*\.exe$/.test(f));
+    if (match) {
+      const fullPath = join(PROJECT_ROOT, match);
+      console.log(`[Update] Dev mode: found local installer ${fullPath}`);
+      return fullPath;
+    }
+  } catch {}
+  return undefined;
+}
+
+const LOCAL_INSTALLER = findLocalInstaller();
+const DEV_FORCE_UPDATE = process.env.DEV_FORCE_UPDATE === "1" || !!LOCAL_INSTALLER;
+
+interface ReleaseInfo {
+  version: string;
+  notes: string;
+  date: string;
+}
+
 interface UpdateState {
   current: string;
   latest: string | null;
   updateAvailable: boolean;
   downloadUrl: string | null;
+  /** All releases newer than current version */
+  newReleases: ReleaseInfo[];
+  currentReleaseNotes: string | null;
+  currentReleaseDate: string | null;
+  lastChecked: string | null;
   checked: boolean;
 }
 
@@ -22,6 +57,10 @@ let state: UpdateState = {
   latest: null,
   updateAvailable: false,
   downloadUrl: null,
+  newReleases: [],
+  currentReleaseNotes: null,
+  currentReleaseDate: null,
+  lastChecked: null,
   checked: false,
 };
 
@@ -36,6 +75,53 @@ export function getUpdateState(): UpdateState {
   return state;
 }
 
+const GH_HEADERS = { "User-Agent": `raceiq/${VERSION}` };
+
+interface GitHubRelease {
+  tag_name: string;
+  body?: string;
+  published_at?: string;
+  assets: { name: string; browser_download_url: string }[];
+}
+
+/** Strip GitHub auto-generated boilerplate from release notes. */
+function cleanReleaseNotes(body: string): string {
+  return body
+    .replace(/^#+\s*What's Changed\s*\n*/im, "")
+    .replace(/\n*\*\*Full Changelog\*\*:.*$/im, "")
+    .trim();
+}
+
+/** Fetch all releases from GitHub and split into new/current. */
+async function fetchReleases(currentVersion: string): Promise<{
+  newReleases: ReleaseInfo[];
+  currentReleaseNotes: string | null;
+  currentReleaseDate: string | null;
+}> {
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=50`, { headers: GH_HEADERS });
+  if (!res.ok) return { newReleases: [], currentReleaseNotes: null, currentReleaseDate: null };
+
+  const releases = await res.json() as GitHubRelease[];
+  const newReleases: ReleaseInfo[] = [];
+  let currentReleaseNotes: string | null = null;
+  let currentReleaseDate: string | null = null;
+
+  for (const r of releases) {
+    const ver = r.tag_name.replace(/^v/, "");
+    const notes = r.body?.trim() ? cleanReleaseNotes(r.body.trim()) : null;
+    if (ver === currentVersion) {
+      currentReleaseNotes = notes;
+      currentReleaseDate = r.published_at ?? null;
+    } else if (isNewer(ver, currentVersion)) {
+      if (notes) {
+        newReleases.push({ version: ver, notes, date: r.published_at ?? "" });
+      }
+    }
+  }
+
+  return { newReleases, currentReleaseNotes, currentReleaseDate };
+}
+
 /** Returns true if version string `a` is strictly newer than `b`. */
 export function isNewer(a: string, b: string): boolean {
   const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
@@ -47,6 +133,20 @@ export function isNewer(a: string, b: string): boolean {
 }
 
 export async function checkForUpdate(): Promise<UpdateState> {
+  // Dev mode: fake an available update using a local installer, but fetch real release notes
+  if (DEV_FORCE_UPDATE) {
+    const fakeVersion = "99.0.0";
+    const { newReleases, currentReleaseNotes, currentReleaseDate } = await fetchReleases(VERSION).catch(() => ({ newReleases: [] as ReleaseInfo[], currentReleaseNotes: null, currentReleaseDate: null }));
+    const lastChecked = new Date().toISOString();
+    state = { current: VERSION, latest: fakeVersion, updateAvailable: true, downloadUrl: LOCAL_INSTALLER ?? null, newReleases, currentReleaseNotes, currentReleaseDate, lastChecked, checked: true };
+    wsManager.broadcastNotification({ type: "update-available", version: fakeVersion });
+    if (trayCommandFile) {
+      try { writeFileSync(trayCommandFile, `update-available:${fakeVersion}`); } catch {}
+    }
+    console.log(`[Update] DEV_FORCE_UPDATE: faking update to v${fakeVersion}${LOCAL_INSTALLER ? ` (local: ${LOCAL_INSTALLER})` : ""}`);
+    return state;
+  }
+
   try {
     const res = await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
@@ -54,14 +154,17 @@ export async function checkForUpdate(): Promise<UpdateState> {
     );
     if (!res.ok) return { ...state, checked: true };
 
-    const data = await res.json() as { tag_name: string; assets: { name: string; browser_download_url: string }[] };
+    const data = await res.json() as GitHubRelease;
     const latest = data.tag_name.replace(/^v/, "");
     const updateAvailable = isNewer(latest, VERSION);
 
-    const zipAsset = data.assets.find((a) => a.name.match(/raceiq-v.*-windows-x64\.zip$/));
-    const downloadUrl = zipAsset?.browser_download_url ?? null;
+    const installerAsset = data.assets.find((a) => a.name.match(/RaceIQ-Setup-v.*\.exe$/));
+    const downloadUrl = installerAsset?.browser_download_url ?? null;
 
-    state = { current: VERSION, latest, updateAvailable, downloadUrl, checked: true };
+    const { newReleases, currentReleaseNotes, currentReleaseDate } = await fetchReleases(VERSION).catch(() => ({ newReleases: [] as ReleaseInfo[], currentReleaseNotes: null, currentReleaseDate: null }));
+
+    const lastChecked = new Date().toISOString();
+    state = { current: VERSION, latest, updateAvailable, downloadUrl, newReleases, currentReleaseNotes, currentReleaseDate, lastChecked, checked: true };
 
     if (updateAvailable) {
       // Notify browser clients via WebSocket
@@ -80,97 +183,96 @@ export async function checkForUpdate(): Promise<UpdateState> {
 }
 
 export function startUpdateCheckSchedule(): void {
-  // Delay startup check by 10s to not compete with server init
-  setTimeout(() => checkForUpdate(), 10_000);
+  if (DEV_FORCE_UPDATE) {
+    // Dev mode: check immediately so release notes are available on first load
+    checkForUpdate();
+  } else {
+    // Delay startup check by 10s to not compete with server init
+    setTimeout(() => checkForUpdate(), 10_000);
+  }
   setInterval(() => checkForUpdate(), FOUR_HOURS_MS);
 }
 
-/** Downloads and applies an update. Spawns an elevated PS1 swap script, then exits. */
+/** Downloads the Inno Setup installer and runs it silently. Inno handles process kill, file swap, registry update, and relaunch. */
 export async function applyUpdate(): Promise<void> {
-  if (!state.updateAvailable || !state.downloadUrl || !state.latest) {
+  if (process.platform !== "win32") {
+    throw new Error("Auto-update is only supported on Windows");
+  }
+  if (!state.updateAvailable || !state.latest) {
     throw new Error("No update available");
   }
 
   const version = state.latest;
-  const downloadUrl = state.downloadUrl;
-  const tmpDir = tmpdir();
-  const zipPath = join(tmpDir, `raceiq-update-v${version}.zip`);
-  const stagingDir = join(tmpDir, `raceiq-update-v${version}`);
-  const installDir = dirname(process.execPath);
-  const pid = process.pid;
+  let installerPath: string;
 
-  // Download the ZIP
-  console.log(`[Update] Downloading v${version} from ${downloadUrl}`);
-  const res = await fetch(downloadUrl);
-  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-  const buffer = await res.arrayBuffer();
-  writeFileSync(zipPath, Buffer.from(buffer));
-  console.log(`[Update] Downloaded to ${zipPath}`);
+  // Local installer path — skip download entirely
+  if (LOCAL_INSTALLER) {
+    installerPath = resolve(LOCAL_INSTALLER);
+    if (!existsSync(installerPath)) {
+      throw new Error(`Local installer not found: ${installerPath}`);
+    }
+    console.log(`[Update] Using local installer: ${installerPath}`);
 
-  // Write the elevated swap script
-  const swapScript = `
-$installDir = '${installDir.replace(/\\/g, "\\\\")}'
-$zipPath = '${zipPath.replace(/\\/g, "\\\\")}'
-$stagingDir = '${stagingDir.replace(/\\/g, "\\\\")}'
-$targetPid = ${pid}
+    // Simulate download progress for UI testing (~2s total)
+    wsManager.broadcastNotification({ type: "update-progress", stage: "downloading", percent: 0 });
+    for (let p = 10; p <= 100; p += 10) {
+      await new Promise((r) => setTimeout(r, 200));
+      wsManager.broadcastNotification({ type: "update-progress", stage: "downloading", percent: p });
+    }
+  } else {
+    // Download from GitHub
+    if (!state.downloadUrl) throw new Error("No download URL available");
+    const downloadUrl = state.downloadUrl;
+    installerPath = join(tmpdir(), `RaceIQ-Setup-v${version}.exe`);
 
-# Wait for main process to exit (max 30s)
-$deadline = (Get-Date).AddSeconds(30)
-while ((Get-Date) -lt $deadline) {
-  $proc = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
-  if (-not $proc) { break }
-  Start-Sleep -Milliseconds 500
-}
+    console.log(`[Update] Downloading installer v${version} from ${downloadUrl}`);
+    wsManager.broadcastNotification({ type: "update-progress", stage: "downloading", percent: 0 });
 
-# Extract ZIP to staging dir
-if (Test-Path $stagingDir) { Remove-Item $stagingDir -Recurse -Force }
-Expand-Archive -Path $zipPath -DestinationPath $stagingDir -Force
+    const res = await fetch(downloadUrl);
+    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
 
-# Rename old exe (can rename a running exe on Windows)
-$oldExe = Join-Path $installDir 'raceiq.exe'
-$oldExeBackup = Join-Path $installDir 'raceiq.exe.old'
-if (Test-Path $oldExeBackup) { Remove-Item $oldExeBackup -Force -ErrorAction SilentlyContinue }
-Rename-Item -Path $oldExe -NewName 'raceiq.exe.old' -Force -ErrorAction SilentlyContinue
+    const contentLength = Number(res.headers.get("content-length") || 0);
+    const body = res.body;
 
-# Copy new files over install dir
-Copy-Item -Path (Join-Path $stagingDir '*') -Destination $installDir -Recurse -Force
+    if (!body || !contentLength) {
+      const buffer = await res.arrayBuffer();
+      writeFileSync(installerPath, Buffer.from(buffer));
+    } else {
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      let lastBroadcast = 0;
 
-# Launch new exe
-Start-Process (Join-Path $installDir 'raceiq.exe')
+      for await (const chunk of body) {
+        chunks.push(chunk);
+        received += chunk.length;
+        const percent = Math.round((received / contentLength) * 100);
+        if (percent >= lastBroadcast + 5 || percent === 100) {
+          lastBroadcast = percent;
+          wsManager.broadcastNotification({ type: "update-progress", stage: "downloading", percent });
+        }
+      }
 
-# Cleanup
-Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
-`.trimStart();
+      const buffer = Buffer.concat(chunks);
+      writeFileSync(installerPath, buffer);
+    }
 
-  const swapScriptPath = join(tmpDir, `raceiq-swap-v${version}.ps1`);
-  writeFileSync(swapScriptPath, swapScript, "utf8");
-
-  // Spawn the script elevated (triggers UAC prompt)
-  spawn(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-WindowStyle", "Hidden",
-      "-ExecutionPolicy", "Bypass",
-      "-Command",
-      `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \\"${swapScriptPath.replace(/\\/g, "\\\\")}\\"'`,
-    ],
-    { stdio: "ignore", detached: true, windowsHide: true },
-  ).unref();
-
-  console.log(`[Update] Swap script spawned elevated. Exiting...`);
-  // Small delay so the response can be sent before we exit
-  setTimeout(() => process.exit(0), 500);
-}
-
-/** Delete raceiq.exe.old if left over from a previous update. */
-export function cleanupOldExe(): void {
-  const oldExe = join(dirname(process.execPath), "raceiq.exe.old");
-  if (existsSync(oldExe)) {
-    try {
-      unlinkSync(oldExe);
-      console.log("[Update] Cleaned up raceiq.exe.old");
-    } catch {}
+    console.log(`[Update] Downloaded to ${installerPath}`);
   }
+
+  wsManager.broadcastNotification({ type: "update-progress", stage: "installing", percent: 100 });
+
+  // Run the installer silently — Inno Setup handles:
+  // - Killing the running process (PrepareToInstall in .iss)
+  // - Swapping all files in the install directory
+  // - Updating Windows registry (Apps & Features version)
+  // - Relaunching the app (postinstall Run section)
+  console.log(`[Update] Spawning installer: ${installerPath}`);
+  spawn(installerPath, ["/SILENT", "/NORESTART"], {
+    stdio: "ignore",
+    detached: true,
+  }).unref();
+
+  console.log(`[Update] Installer spawned. Process will be killed by Inno Setup.`);
+  // Small delay so the HTTP response can be sent before Inno kills us
+  setTimeout(() => process.exit(0), 500);
 }
