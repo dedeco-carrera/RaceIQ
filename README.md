@@ -71,7 +71,7 @@ Configure your game's telemetry settings to send UDP data to `127.0.0.1:5301`, t
 
 ## Data Storage
 
-All data stays on your machine in a `data/` folder next to the executable:
+All data stays on your machine in `%APPDATA%/raceiq`:
 
 - **Database** — every lap, session, analysis, tune, and profile stored in SQLite
 - **Settings** — UDP port, units, active profile, and thresholds
