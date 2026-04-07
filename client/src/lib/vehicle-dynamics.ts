@@ -5,6 +5,47 @@
 
 import type { TelemetryPacket } from "@shared/types";
 
+// ── Semantic Color Palette ────────────────────────────────────────
+// Reads from CSS custom properties defined in index.css (--dynamics-*).
+// Use COLORS for inline styles / SVG attributes, COLOR_VARS for CSS var() refs.
+
+// CSS var() references — use in inline styles and DOM SVG attributes
+export const COLOR_VARS = {
+  green:  "var(--dynamics-green)",
+  yellow: "var(--dynamics-yellow)",
+  amber:  "var(--dynamics-amber)",
+  orange: "var(--dynamics-orange)",
+  red:    "var(--dynamics-red)",
+  blue:   "var(--dynamics-blue)",
+  gray:   "var(--dynamics-gray)",
+} as const;
+
+// Raw hex values — use in canvas, WebGL, Three.js, or anywhere
+// CSS var() can't be resolved. Keep in sync with index.css :root --dynamics-*.
+export const COLORS_HEX = {
+  green:  "#34d399",
+  yellow: "#fbbf24",
+  amber:  "#f59e0b",
+  orange: "#fb923c",
+  red:    "#ef4444",
+  blue:   "#3b82f6",
+  gray:   "#94a3b8",
+} as const;
+
+// Default export uses CSS vars — works in React inline styles and SVG
+export const COLORS = COLOR_VARS;
+
+// Tailwind utility classes using the theme tokens
+export const COLOR_CLASSES = {
+  green:  "text-dynamics-green",
+  yellow: "text-dynamics-yellow",
+  amber:  "text-dynamics-amber",
+  orange: "text-dynamics-orange",
+  red:    "text-dynamics-red",
+  blue:   "text-dynamics-blue",
+  gray:   "text-dynamics-gray",
+} as const;
+
 // ── Slip Ratio (longitudinal) ──────────────────────────────────────
 // SAE J670 definition: SR = (Vwheel - Vground) / max(Vwheel, Vground)
 // Positive = wheelspin (acceleration), Negative = lockup (braking)
@@ -66,6 +107,26 @@ export function allFrictionCircle(pkt: TelemetryPacket): { fl: number; fr: numbe
   };
 }
 
+// ── Tire Traction State ───────────────────────────────────────────
+// Single source of truth for tire grip state labels used in both
+// the 2D wheel cards and the data panel traction row.
+
+export interface TireState {
+  label: "LOCK" | "SPIN" | "IDLE" | "SLIDE" | "SLIP" | "GRIP" | "LOSS";
+  color: string;
+}
+
+export function tireState(wheelStateLabel: string, combinedSlip: number): TireState {
+  const combined = Math.abs(combinedSlip);
+  if (wheelStateLabel === "lockup") return { label: "LOCK", color: COLORS.red };
+  if (wheelStateLabel === "spin") return { label: "SPIN", color: COLORS.orange };
+  if (wheelStateLabel === "idle") return { label: "IDLE", color: COLORS.gray };
+  if (combined >= 2.0) return { label: "LOSS", color: COLORS.red };
+  if (combined >= 1.0) return { label: "SLIDE", color: COLORS.red };
+  if (combined >= 0.5) return { label: "SLIP", color: COLORS.yellow };
+  return { label: "GRIP", color: COLORS.green };
+}
+
 // ── Understeer / Oversteer Detection ───────────────────────────────
 // Based on front-vs-rear slip angle difference (Milliken method).
 // delta = avg(front slip angle) - avg(rear slip angle)
@@ -82,17 +143,76 @@ export interface SteerBalance {
   severity: number;       // 0-1, how far from neutral
 }
 
+/** Slip angle threshold (°) for under/oversteer detection at a given speed */
+export const BALANCE_THRESHOLDS = [
+  { maxMph: 30, deg: 8 },
+  { maxMph: 60, deg: 5 },
+  { maxMph: Infinity, deg: 3 },
+] as const;
+
+export function balanceThreshold(speedMph: number): number {
+  for (const t of BALANCE_THRESHOLDS) {
+    if (speedMph <= t.maxMph) return t.deg;
+  }
+  return BALANCE_THRESHOLDS[BALANCE_THRESHOLDS.length - 1].deg;
+}
+
+/** SVG chart data for the balance threshold graph */
+export interface BalanceChartData {
+  polylinePoints: string;
+  markerX: number;
+  markerY: number;
+  yLabels: { deg: number; y: number }[];
+  xLabels: { mph: number; x: number }[];
+  degToY: (d: number) => number;
+}
+
+export function balanceChartData(speedMph: number): BalanceChartData {
+  const yScale = 10;
+  const degToY = (d: number) => 65 - (d / yScale) * 60;
+  const mphToX = (mph: number) => 30 + (Math.min(mph, 90) / 90) * 165;
+
+  // Build polyline from thresholds
+  const points: string[] = [];
+  let prevMph = 0;
+  for (const t of BALANCE_THRESHOLDS) {
+    const endMph = Math.min(t.maxMph, 90);
+    const y = degToY(t.deg);
+    if (points.length > 0) points.push(`${mphToX(prevMph)},${y}`);
+    points.push(`${mphToX(endMph)},${y}`);
+    prevMph = endMph;
+  }
+
+  const thr = balanceThreshold(speedMph);
+
+  return {
+    polylinePoints: points.join(" "),
+    markerX: mphToX(speedMph),
+    markerY: degToY(thr),
+    yLabels: BALANCE_THRESHOLDS.map(t => ({ deg: t.deg, y: degToY(t.deg) })),
+    xLabels: [0, 30, 60, 90].map(v => ({ mph: v, x: mphToX(v) })),
+    degToY,
+  };
+}
+
+// EMA state for smoothing — persists across calls
+let _smoothedDelta = 0;
+const EMA_ALPHA = 0.15; // lower = smoother, less flicker
+
 export function steerBalance(pkt: TelemetryPacket): SteerBalance {
   const frontAvg = (Math.abs(pkt.TireSlipAngleFL) + Math.abs(pkt.TireSlipAngleFR)) / 2 * RAD2DEG;
   const rearAvg = (Math.abs(pkt.TireSlipAngleRL) + Math.abs(pkt.TireSlipAngleRR)) / 2 * RAD2DEG;
-  const delta = frontAvg - rearAvg;
+  const rawDelta = frontAvg - rearAvg;
 
-  // Threshold scales with speed — at low speed, larger deltas are normal
+  // EMA smoothing to prevent frame-by-frame flickering
+  _smoothedDelta = EMA_ALPHA * rawDelta + (1 - EMA_ALPHA) * _smoothedDelta;
+  const delta = _smoothedDelta;
+
   const speedMph = pkt.Speed * 2.23694;
-  const threshold = speedMph > 60 ? 5 : speedMph > 30 ? 8 : 12;
+  const threshold = balanceThreshold(speedMph);
 
   const state = delta > threshold ? "understeer" : delta < -threshold ? "oversteer" : "neutral";
-  const severity = Math.min(1, Math.abs(delta) / (threshold * 3));
+  const severity = Math.min(1, Math.abs(delta) / (threshold * 1.5));
 
   return { frontAvgDeg: frontAvg, rearAvgDeg: rearAvg, deltaDeg: delta, state, severity };
 }
@@ -190,21 +310,118 @@ export function corneringEfficiency(pkt: TelemetryPacket): number {
 
 export function slipRatioColor(sr: number): string {
   const a = Math.abs(sr);
-  if (a < 0.03) return "#94a3b8"; // grey — minimal
-  if (a < 0.08) return "#34d399"; // green — optimal zone
-  if (a < 0.15) return "#fbbf24"; // yellow — sliding
-  return "#ef4444";               // red — beyond limit
+  if (a < 0.08) return COLORS.green;
+  if (a < 0.15) return COLORS.yellow;
+  return COLORS.red;
 }
 
 export function frictionUtilColor(util: number): string {
-  if (util < 0.3) return "#94a3b8"; // grey — low demand
-  if (util < 0.7) return "#34d399"; // green — comfortable
-  if (util < 0.9) return "#fbbf24"; // yellow — near limit
-  return "#ef4444";                  // red — at/beyond limit
+  if (util <= 1.0) return COLORS.green;
+  if (util <= 1.1) return COLORS.yellow;
+  return COLORS.red;
 }
 
 export function balanceColor(state: "understeer" | "oversteer" | "neutral"): string {
-  if (state === "neutral") return "#34d399";
-  if (state === "understeer") return "#f59e0b";
-  return "#ef4444"; // oversteer
+  if (state === "neutral") return COLORS.green;
+  if (state === "understeer") return COLORS.amber;
+  return COLORS.red;
+}
+
+// ── Tire Temperature Colors ───────────────────────────────────────
+// 4-band: cold / optimal / hot / overheat
+// Thresholds are unit-aware (passed in from settings).
+
+export interface TireTempThresholds {
+  cold: number;
+  warm: number;
+  hot: number;
+}
+
+/** CSS var color for tire temp (use in DOM/SVG inline styles) */
+export function tireTempColor(temp: number, thresholds: TireTempThresholds): string {
+  if (temp < thresholds.cold) return COLORS.blue;
+  if (temp < thresholds.warm) return COLORS.green;
+  if (temp < thresholds.hot) return COLORS.amber;
+  return COLORS.red;
+}
+
+/** Raw hex color for tire temp (use in canvas/WebGL/Three.js) */
+export function tireTempColorHex(temp: number, thresholds: TireTempThresholds): string {
+  if (temp < thresholds.cold) return COLORS_HEX.blue;
+  if (temp < thresholds.warm) return COLORS_HEX.green;
+  if (temp < thresholds.hot) return COLORS_HEX.amber;
+  return COLORS_HEX.red;
+}
+
+/** Tailwind class for tire temp (used in text elements) */
+export function tireTempClass(temp: number, thresholds: TireTempThresholds): string {
+  if (temp < thresholds.cold) return "text-dynamics-blue";
+  if (temp < thresholds.warm) return "text-dynamics-green";
+  if (temp < thresholds.hot) return "text-dynamics-amber";
+  return "text-dynamics-red";
+}
+
+/** Human-readable temp label + hex color */
+export function tireTempLabel(temp: number, thresholds: TireTempThresholds): { label: string; color: string } {
+  if (temp < thresholds.cold) return { label: "COLD", color: COLORS.blue };
+  if (temp < thresholds.warm) return { label: "OPT", color: COLORS.green };
+  if (temp < thresholds.hot) return { label: "HOT", color: COLORS.amber };
+  return { label: "OVER", color: COLORS.red };
+}
+
+// ── Tire Health Color ─────────────────────────────────────────────
+// Health = 1 - wear (0 = dead, 1 = new). Thresholds are game-specific.
+
+/** Color for tire health (wear is 0=new, 1=dead). Returns CSS var. */
+export function tireHealthColor(wear: number, thresholds = { green: 0.70, yellow: 0.40 }): string {
+  const health = 1 - wear;
+  if (health >= thresholds.green) return COLORS.green;
+  if (health >= thresholds.yellow) return COLORS.yellow;
+  return COLORS.red;
+}
+
+/** Tailwind text class for tire health percentage (0-100). */
+export function tireHealthTextClass(healthPct: number, thresholds: number[] = [20, 40, 60, 80]): string {
+  const classes = [COLOR_CLASSES.red, COLOR_CLASSES.orange, COLOR_CLASSES.yellow, COLOR_CLASSES.green, COLOR_CLASSES.green];
+  for (let i = 0; i < thresholds.length; i++) {
+    if (healthPct <= thresholds[i]) return classes[i];
+  }
+  return classes[classes.length - 1];
+}
+
+/** Tailwind bg class for tire health percentage (0-100). */
+export function tireHealthBgClass(healthPct: number, thresholds: number[] = [20, 40, 60, 80]): string {
+  const classes = ["bg-dynamics-red", "bg-dynamics-orange", "bg-dynamics-yellow", "bg-dynamics-green", "bg-dynamics-green"];
+  for (let i = 0; i < thresholds.length; i++) {
+    if (healthPct <= thresholds[i]) return classes[i];
+  }
+  return classes[classes.length - 1];
+}
+
+// ── Wear Rate Color ──────────────────────────────────────────────
+
+export function wearRateColor(rate: number | null): string {
+  if (rate == null || rate < 0.01) return COLORS.gray;
+  if (rate < 0.05) return COLORS.green;
+  if (rate < 0.1) return COLORS.yellow;
+  return COLORS.red;
+}
+
+// ── Brake Temp Color ─────────────────────────────────────────────
+
+export function brakeTempColor(temp: number): string {
+  if (temp > 800) return COLORS.red;
+  if (temp > 500) return COLORS.orange;
+  if (temp > 200) return COLORS.yellow;
+  return COLORS.gray;
+}
+
+// ── Slip Angle Color ──────────────────────────────────────────────
+
+export function slipAngleColor(deg: number): string {
+  const a = Math.abs(deg);
+  if (a < 4) return COLORS.green;
+  if (a < 8) return COLORS.yellow;
+  if (a < 14) return COLORS.orange;
+  return COLORS.red;
 }

@@ -2,28 +2,17 @@ import React, { useRef, useMemo, useState, useCallback, useEffect, Suspense } fr
 import { client } from "../lib/rpc";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, Line, useGLTF } from "@react-three/drei";
-// @ts-ignore
+// @ts-expect-error — three-stdlib types not always resolved
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import type { TelemetryPacket } from "@shared/types";
 import { getCarModel, loadCarModelConfigs, F1_CAR, DEMO_CAR, type CarModelEnrichment } from "../data/car-models";
-import { allWheelStates } from "../lib/vehicle-dynamics";
+import { allWheelStates, frictionCircleUtil, frictionUtilColor, tireTempColorHex } from "../lib/vehicle-dynamics";
 import { useUnits } from "../hooks/useUnits";
 import { useSettings } from "../hooks/queries";
 import { useGameId } from "../stores/game";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 
-// ── Tire temp → color ──────────────────────────────────────────────
-
-function tractionColor(slip: number, gameId?: string): string {
-  // F1/ACC slip values are radians (0.01-0.1), Forza uses unitless (0-2+)
-  const isSmallScale = gameId === "f1-2025" || gameId === "acc";
-  const warn = isSmallScale ? 0.03 : 0.3;
-  const crit = isSmallScale ? 0.08 : 0.8;
-  if (slip < warn) return "#34d399";    // full grip — green
-  if (slip < crit) return "#fbbf24";    // sliding — amber
-  return "#ef4444";                     // loss of traction — red
-}
 
 // ── Wheel component ────────────────────────────────────────────────
 
@@ -43,25 +32,8 @@ function makeWheelGeometries(radius: number, width: number) {
 const useWheelGeometries = (radius = 0.34, width = 0.30) =>
   useMemo(() => makeWheelGeometries(radius, width), [radius, width]);
 
-// Forza tire temps are in °F: <150 cold, 150-170 warming, 170-220 optimal, 220-250 hot, >250 overheating
-function tireTempColor(temp: number): string {
-  if (temp < 150) return "#3b82f6";
-  if (temp < 170) return "#22d3ee";
-  if (temp < 220) return "#34d399";
-  if (temp < 250) return "#fbbf24";
-  return "#ef4444";
-}
 
-function tempToColor(t: number): string {
-  if (t < 150) return "#3b82f6";
-  if (t < 170) return "#22d3ee";
-  if (t < 220) return "#34d399";
-  if (t < 250) return "#fbbf24";
-  return "#ef4444";
-}
-
-function TempLabel({ displayTemp, rawTemp, side }: { displayTemp: string; rawTemp: number; side: "left" | "right" }) {
-  const color = tempToColor(rawTemp);
+function TempLabel({ displayTemp, color, side }: { displayTemp: string; color: string; side: "left" | "right" }) {
   const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 128;
@@ -202,10 +174,10 @@ function Wheel({
   position,
   steerAngle,
   gripColor,
-  tempColor,
+  rimColor,
   rotationSpeed,
-  temp,
   displayTemp,
+  rimColorForDisplay,
   brakeTemp,
   wearRate,
   wear,
@@ -218,10 +190,10 @@ function Wheel({
   position: [number, number, number];
   steerAngle: number;
   gripColor: string;
-  tempColor: string;
+  rimColor: string;
   rotationSpeed: number;
-  temp: number;
   displayTemp: string;
+  rimColorForDisplay: string;
   brakeTemp: number;
   wearRate: number;
   wear: number;
@@ -251,7 +223,7 @@ function Wheel({
             <meshBasicMaterial color={gripColor} wireframe />
           </mesh>
           <mesh geometry={rim}>
-            <meshBasicMaterial color={tempColor} transparent opacity={0.85} side={THREE.DoubleSide} />
+            <meshBasicMaterial color={rimColor} transparent opacity={0.85} side={THREE.DoubleSide} />
           </mesh>
           <mesh geometry={hub}>
             <meshBasicMaterial color="#475569" wireframe side={THREE.DoubleSide} />
@@ -266,9 +238,9 @@ function Wheel({
         )}
       </group>
       {/* Temp / health / wear labels — only when there's live data */}
-      {temp > 0 && (
+      {displayTemp && (
         <>
-          <TempLabel displayTemp={displayTemp} rawTemp={temp} side={side} />
+          <TempLabel displayTemp={displayTemp} color={rimColorForDisplay} side={side} />
           <HealthLabel wear={wear} side={side} />
           <WearLabel wearRate={wearRate} side={side} />
           {brakeTemp > 0 && <BrakeTempLabel temp={brakeTemp} side={side} />}
@@ -741,8 +713,8 @@ function CurbMarkers({
   const allCurb = useMemo(() => [...leftCurb, ...rightCurb], [leftCurb, rightCurb]);
 
   // Use filterByDistance (same as track outline) to get line segments, then flatten to individual points
-  const curbSegs = useMemo(() => filterByDistance(allCurb, cx, cz, yaw, GROUND_Y), [allCurb, cx, cz, yaw]);
-  const puddleSegs = useMemo(() => filterByDistance(puddlePoints, cx, cz, yaw, GROUND_Y), [puddlePoints, cx, cz, yaw]);
+  const curbSegs = useMemo(() => filterByDistance(allCurb, cx, cz, yaw, GROUND_Y), [allCurb, cx, cz, yaw, GROUND_Y]);
+  const puddleSegs = useMemo(() => filterByDistance(puddlePoints, cx, cz, yaw, GROUND_Y), [puddlePoints, cx, cz, yaw, GROUND_Y]);
 
   // Flatten segments into individual points for rendering as dots
   const curbPts = useMemo(() => curbSegs.flatMap(seg => seg), [curbSegs]);
@@ -862,8 +834,8 @@ function TrackBoundaryEdges({
   const ahead = distAhead ?? DIST_AHEAD;
 
   // Pre-compute full wall geometry once — filter by distance on cursor change
-  const leftSegsGround = useMemo(() => filterByDistance(boundaries.leftEdge, packet.PositionX, packet.PositionZ, packet.Yaw, GROUND_Y, ahead), [boundaries.leftEdge, packet.PositionX, packet.PositionZ, packet.Yaw, ahead]);
-  const rightSegsGround = useMemo(() => filterByDistance(boundaries.rightEdge, packet.PositionX, packet.PositionZ, packet.Yaw, GROUND_Y, ahead), [boundaries.rightEdge, packet.PositionX, packet.PositionZ, packet.Yaw, ahead]);
+  const leftSegsGround = useMemo(() => filterByDistance(boundaries.leftEdge, packet.PositionX, packet.PositionZ, packet.Yaw, GROUND_Y, ahead), [boundaries.leftEdge, packet.PositionX, packet.PositionZ, packet.Yaw, GROUND_Y, ahead]);
+  const rightSegsGround = useMemo(() => filterByDistance(boundaries.rightEdge, packet.PositionX, packet.PositionZ, packet.Yaw, GROUND_Y, ahead), [boundaries.rightEdge, packet.PositionX, packet.PositionZ, packet.Yaw, GROUND_Y, ahead]);
 
   // Build wall geometry from ground segments (extrude upward) — single pass
   const buildWalls = useCallback((segs: [number, number, number][][]): THREE.BufferGeometry | null => {
@@ -937,7 +909,6 @@ function DimensionLines({ carModel }: { carModel: CarModelEnrichment }) {
 }
 
 function DimensionLabel({ position, text, color }: { position: [number, number, number]; text: string; color: string }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 256;
@@ -949,7 +920,6 @@ function DimensionLabel({ position, text, color }: { position: [number, number, 
     ctx.textBaseline = "middle";
     ctx.fillStyle = color;
     ctx.fillText(text, 128, 32);
-    canvasRef.current = canvas;
     const tex = new THREE.CanvasTexture(canvas);
     tex.needsUpdate = true;
     return tex;
@@ -1031,15 +1001,17 @@ function CameraController({ viewPreset }: { viewPreset: ViewPreset }) {
   );
 }
 
-function CarScene({ packet: packetProp, telemetry, cursorIdx, outline, boundaries, toggles, viewPreset, carModel, modelOffsetX, fmtTemp, hideModelWheels, suspThresholds, autoOrbit }: { packet: TelemetryPacket; telemetry: TelemetryPacket[]; cursorIdx: number; outline: { x: number; z: number }[] | null; boundaries: { leftEdge: { x: number; z: number }[]; rightEdge: { x: number; z: number }[] } | null; toggles: ViewToggles; viewPreset: ViewPreset; carModel: CarModelEnrichment & { hasModel: boolean }; modelOffsetX: number; fmtTemp: (f: number) => string; hideModelWheels?: boolean; suspThresholds: number[]; autoOrbit?: boolean }) {
+function CarScene({ packet: packetProp, telemetry, cursorIdx, outline, boundaries, toggles, viewPreset, carModel, modelOffsetX, fmtTemp, hideModelWheels, suspThresholds, autoOrbit, tireColors }: { packet: TelemetryPacket; telemetry: TelemetryPacket[]; cursorIdx: number; outline: { x: number; z: number }[] | null; boundaries: { leftEdge: { x: number; z: number }[]; rightEdge: { x: number; z: number }[] } | null; toggles: ViewToggles; viewPreset: ViewPreset; carModel: CarModelEnrichment & { hasModel: boolean }; modelOffsetX: number; fmtTemp: (f: number) => string; hideModelWheels?: boolean; suspThresholds: number[]; autoOrbit?: boolean; tireColors: [string, string, string, string] }) {
+  const [colorFL, colorFR, colorRL, colorRR] = tireColors;
+
   // Keep packet in a ref so useFrame reads latest without triggering re-render
   const packetRef = useRef(packetProp);
-  packetRef.current = packetProp;
+  useEffect(() => { packetRef.current = packetProp; });
   const packet = packetProp; // still use prop for JSX (re-renders at 10fps)
   const carGroupRef = useRef<THREE.Group>(null);
   const prevTimeRef = useRef(packet.TimestampMS);
   const prevWear = useRef([packet.TireWearFL, packet.TireWearFR, packet.TireWearRL, packet.TireWearRR]);
-  const wearRates = useRef([0, 0, 0, 0]);
+  const [wearRatesVal, setWearRatesVal] = useState([0, 0, 0, 0]);
 
   // Derive body roll/pitch from suspension deltas (not raw telemetry which includes track gradient)
   // Higher suspension travel = more compressed on that corner
@@ -1078,16 +1050,22 @@ function CarScene({ packet: packetProp, telemetry, cursorIdx, outline, boundarie
 
 
   // Compute tire wear rate (/s) — smoothed with EMA
-  const dt = (packet.TimestampMS - prevTimeRef.current) / 1000;
-  prevTimeRef.current = packet.TimestampMS;
-  const currentWear = [packet.TireWearFL, packet.TireWearFR, packet.TireWearRL, packet.TireWearRR];
-  if (dt > 0 && dt < 1) {
-    for (let i = 0; i < 4; i++) {
-      const rawRate = (prevWear.current[i] - currentWear[i]) / dt;
-      wearRates.current[i] = wearRates.current[i] * 0.9 + rawRate * 0.1;
+  useEffect(() => {
+    const dt = (packet.TimestampMS - prevTimeRef.current) / 1000;
+    prevTimeRef.current = packet.TimestampMS;
+    const currentWear = [packet.TireWearFL, packet.TireWearFR, packet.TireWearRL, packet.TireWearRR];
+    if (dt > 0 && dt < 1) {
+      setWearRatesVal(prev => {
+        const next = [...prev];
+        for (let i = 0; i < 4; i++) {
+          const rawRate = (prevWear.current[i] - currentWear[i]) / dt;
+          next[i] = prev[i] * 0.9 + rawRate * 0.1;
+        }
+        return next;
+      });
     }
-  }
-  prevWear.current = currentWear;
+    prevWear.current = currentWear;
+  });
 
   const steerRad = -(packet.Steer / 127) * 0.35;
 
@@ -1106,10 +1084,10 @@ function CarScene({ packet: packetProp, telemetry, cursorIdx, outline, boundarie
   const fTireW = carModel.frontTireWidth ?? 0.30;
   const rTireW = carModel.rearTireWidth ?? 0.30;
   const wheelData = [
-    { pos: [wb, 0, -ft] as [number, number, number], steer: steerRad, susp: packet.NormSuspensionTravelFL, slip: Math.abs(packet.TireCombinedSlipFL), temp: packet.TireTempFL, brakeTemp: packet.BrakeTempFrontLeft ?? packet.f1?.brakeTempFL ?? 0, onRumble: packet.WheelOnRumbleStripFL !== 0, puddle: packet.WheelInPuddleDepthFL, wearRate: wearRates.current[0], wear: packet.TireWearFL, rotSpeed: rotFL, tireRadius: fTireR, tireWidth: fTireW },
-    { pos: [wb, 0, ft] as [number, number, number], steer: steerRad, susp: packet.NormSuspensionTravelFR, slip: Math.abs(packet.TireCombinedSlipFR), temp: packet.TireTempFR, brakeTemp: packet.BrakeTempFrontRight ?? packet.f1?.brakeTempFR ?? 0, onRumble: packet.WheelOnRumbleStripFR !== 0, puddle: packet.WheelInPuddleDepthFR, wearRate: wearRates.current[1], wear: packet.TireWearFR, rotSpeed: rotFR, tireRadius: fTireR, tireWidth: fTireW },
-    { pos: [-wb, 0, -rt] as [number, number, number], steer: 0, susp: packet.NormSuspensionTravelRL, slip: Math.abs(packet.TireCombinedSlipRL), temp: packet.TireTempRL, brakeTemp: packet.BrakeTempRearLeft ?? packet.f1?.brakeTempRL ?? 0, onRumble: packet.WheelOnRumbleStripRL !== 0, puddle: packet.WheelInPuddleDepthRL, wearRate: wearRates.current[2], wear: packet.TireWearRL, rotSpeed: rotRL, tireRadius: rTireR, tireWidth: rTireW },
-    { pos: [-wb, 0, rt] as [number, number, number], steer: 0, susp: packet.NormSuspensionTravelRR, slip: Math.abs(packet.TireCombinedSlipRR), temp: packet.TireTempRR, brakeTemp: packet.BrakeTempRearRight ?? packet.f1?.brakeTempRR ?? 0, onRumble: packet.WheelOnRumbleStripRR !== 0, puddle: packet.WheelInPuddleDepthRR, wearRate: wearRates.current[3], wear: packet.TireWearRR, rotSpeed: rotRR, tireRadius: rTireR, tireWidth: rTireW },
+    { pos: [wb, 0, -ft] as [number, number, number], steer: steerRad, susp: packet.NormSuspensionTravelFL, traction: frictionUtilColor(frictionCircleUtil(Math.abs(packet.TireCombinedSlipFL))), rimColor: colorFL, brakeTemp: packet.BrakeTempFrontLeft ?? packet.f1?.brakeTempFL ?? 0, onRumble: packet.WheelOnRumbleStripFL !== 0, puddle: packet.WheelInPuddleDepthFL, wearRate: wearRatesVal[0], wear: packet.TireWearFL, rotSpeed: rotFL, tireRadius: fTireR, tireWidth: fTireW },
+    { pos: [wb, 0, ft] as [number, number, number], steer: steerRad, susp: packet.NormSuspensionTravelFR, traction: frictionUtilColor(frictionCircleUtil(Math.abs(packet.TireCombinedSlipFR))), rimColor: colorFR, brakeTemp: packet.BrakeTempFrontRight ?? packet.f1?.brakeTempFR ?? 0, onRumble: packet.WheelOnRumbleStripFR !== 0, puddle: packet.WheelInPuddleDepthFR, wearRate: wearRatesVal[1], wear: packet.TireWearFR, rotSpeed: rotFR, tireRadius: fTireR, tireWidth: fTireW },
+    { pos: [-wb, 0, -rt] as [number, number, number], steer: 0, susp: packet.NormSuspensionTravelRL, traction: frictionUtilColor(frictionCircleUtil(Math.abs(packet.TireCombinedSlipRL))), rimColor: colorRL, brakeTemp: packet.BrakeTempRearLeft ?? packet.f1?.brakeTempRL ?? 0, onRumble: packet.WheelOnRumbleStripRL !== 0, puddle: packet.WheelInPuddleDepthRL, wearRate: wearRatesVal[2], wear: packet.TireWearRL, rotSpeed: rotRL, tireRadius: rTireR, tireWidth: rTireW },
+    { pos: [-wb, 0, rt] as [number, number, number], steer: 0, susp: packet.NormSuspensionTravelRR, traction: frictionUtilColor(frictionCircleUtil(Math.abs(packet.TireCombinedSlipRR))), rimColor: colorRR, brakeTemp: packet.BrakeTempRearRight ?? packet.f1?.brakeTempRR ?? 0, onRumble: packet.WheelOnRumbleStripRR !== 0, puddle: packet.WheelInPuddleDepthRR, wearRate: wearRatesVal[3], wear: packet.TireWearRR, rotSpeed: rotRR, tireRadius: rTireR, tireWidth: rTireW },
   ];
 
   return (
@@ -1178,11 +1156,11 @@ function CarScene({ packet: packetProp, telemetry, cursorIdx, outline, boundarie
             key={i}
             position={w.pos}
             steerAngle={w.steer}
-            gripColor={tractionColor(w.slip, packet.gameId)}
-            tempColor={tireTempColor(w.temp)}
+            gripColor={w.traction}
+            rimColor={w.rimColor}
             rotationSpeed={w.rotSpeed}
-            temp={w.temp}
-            displayTemp={fmtTemp(w.temp)}
+            displayTemp={fmtTemp(i === 0 ? packet.TireTempFL : i === 1 ? packet.TireTempFR : i === 2 ? packet.TireTempRL : packet.TireTempRR)}
+            rimColorForDisplay={w.rimColor}
             brakeTemp={w.brakeTemp}
             wearRate={w.wearRate}
             wear={w.wear}
@@ -1370,8 +1348,6 @@ export const CarWireframe = React.memo(function CarWireframe({
   carOrdinal,
   carModel: carModelProp,
   tempLabel: tempLabelProp,
-  cursorRef: _cursorRefProp,
-  telemetryRef: _telemetryRefProp,
   showDimensions,
   minimal,
   hideControls,
@@ -1411,7 +1387,7 @@ export const CarWireframe = React.memo(function CarWireframe({
   const { displaySettings } = useSettings();
   const suspThresholds = displaySettings.suspensionThresholds.values;
   const tLabel = tempLabelProp ?? units.tempLabel;
-  const fmtTemp = useCallback((v: number) => `${v.toFixed(0)}${tLabel}`, [tLabel]);
+  const fmtTemp = useCallback((v: number) => `${units.temp(v).toFixed(0)}${tLabel}`, [units, tLabel]);
   const [editMode, setEditMode] = useState(false);
   const [modelOffsetX, setModelOffsetX] = useState(carModel.glbOffsetX ?? 0);
   const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
@@ -1426,7 +1402,8 @@ export const CarWireframe = React.memo(function CarWireframe({
 
   const fpsRef = useRef<HTMLSpanElement>(null);
   const fpsFrames = useRef(0);
-  const fpsLastTime = useRef(performance.now());
+  const [fpsInitTime] = useState(() => performance.now());
+  const fpsLastTime = useRef(fpsInitTime);
 
   return (
     <div className="w-full h-full relative flex-1">
@@ -1449,7 +1426,12 @@ export const CarWireframe = React.memo(function CarWireframe({
           };
         }}
       >
-        <CarScene packet={packet} telemetry={telemetry} cursorIdx={cursorIdx} outline={outline} boundaries={boundaries ?? null} toggles={toggles} viewPreset={viewPreset} carModel={carModel} modelOffsetX={modelOffsetX} fmtTemp={fmtTemp} hideModelWheels={!minimal} suspThresholds={suspThresholds} autoOrbit={autoOrbit} />
+        <CarScene packet={packet} telemetry={telemetry} cursorIdx={cursorIdx} outline={outline} boundaries={boundaries ?? null} toggles={toggles} viewPreset={viewPreset} carModel={carModel} modelOffsetX={modelOffsetX} fmtTemp={fmtTemp} hideModelWheels={!minimal} suspThresholds={suspThresholds} autoOrbit={autoOrbit} tireColors={[
+          tireTempColorHex(units.temp(packet.TireTempFL), units.thresholds),
+          tireTempColorHex(units.temp(packet.TireTempFR), units.thresholds),
+          tireTempColorHex(units.temp(packet.TireTempRL), units.thresholds),
+          tireTempColorHex(units.temp(packet.TireTempRR), units.thresholds),
+        ]} />
       </Canvas>
       <span ref={fpsRef} className="absolute bottom-1 right-24 text-sm font-mono text-app-text-dim/50 px-1 py-0.5" />
 
