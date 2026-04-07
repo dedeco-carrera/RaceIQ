@@ -9,13 +9,17 @@ const ColorThresholdsSchema = z.object({
   values: z.array(z.number()),
 });
 
-const AiProviderSchema = z.enum(["claude-cli", "gemini"]).default("claude-cli");
+const AiProviderSchema = z.enum(["gemini", "openai", "local"]).default("gemini");
+const ChatProviderSchema = z.enum(["gemini", "openai", "local"]).default("gemini");
 
 const AppSettingsSchema = z.object({
   udpPort: z.number().int().min(1024).max(65535).default(5301),
   unit: z.enum(["metric", "imperial"]).default("metric"),
-  aiProvider: AiProviderSchema.default("claude-cli"),
+  aiProvider: AiProviderSchema.default("gemini"),
   aiModel: z.string().default(""),
+  chatProvider: ChatProviderSchema.default("gemini"),
+  chatModel: z.string().default(""),
+  localEndpoint: z.string().default("http://localhost:1234/v1"),
   wsRefreshRate: z.enum(["60", "50", "40", "30"]).default("60"),
   tireTempCelsiusThresholds: z.object({
     cold: z.number().default(65),
@@ -56,6 +60,10 @@ export function loadSettings(): AppSettings {
     // Migrate legacy tireTemperatureThresholds → tireTempCelsiusThresholds
     if (!parsed.tireTempCelsiusThresholds && parsed.tireTemperatureThresholds) {
       parsed.tireTempCelsiusThresholds = parsed.tireTemperatureThresholds;
+    }
+    // Migrate legacy claude-cli provider → gemini
+    if (parsed.aiProvider === "claude-cli") {
+      parsed.aiProvider = "gemini";
     }
 
     return AppSettingsSchema.parse(parsed);

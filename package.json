@@ -20,6 +20,7 @@
     "laps:export": "bun scripts/export-laps.ts",
     "laps:import": "bun scripts/import-laps.ts",
     "build:installer": "bun scripts/build-installer.ts",
+    "mastra:dev": "npx mastra dev --dir mastra",
     "postinstall": "lefthook install",
     "lighthouse": "lighthouse http://raceiq.localhost:1355/ --only-categories=accessibility,performance,best-practices --chrome-flags=\"--headless=new --no-sandbox --disable-gpu\" --output=html --output-path=./lighthouse-report.html && echo 'Report: lighthouse-report.html'"
   },
@@ -27,6 +28,9 @@
     "@hono/zod-validator": "^0.7.6",
     "@libsql/client": "^0.17.2",
     "@libsql/win32-x64-msvc": "^0.5.29",
+    "@mastra/core": "^1.23.0",
+    "@mastra/libsql": "^1.8.0",
+    "@mastra/memory": "^1.14.0",
     "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.2",
     "fzstd": "^0.1.1",

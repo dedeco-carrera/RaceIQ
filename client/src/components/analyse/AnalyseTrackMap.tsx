@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useImperativeHandle, forwardRef } from "react";
+import { useRef, useCallback, useEffect, useLayoutEffect, useImperativeHandle, forwardRef } from "react";
 import type { TelemetryPacket } from "@shared/types";
 
 export interface Point {
@@ -10,6 +10,19 @@ export interface TrackMapHandle {
   updateCursor: (idx: number) => void;
 }
 
+export interface TrackHighlight {
+  startFrac: number;
+  endFrac: number;
+  color: "good" | "warning" | "critical";
+  label: string;
+}
+
+const HIGHLIGHT_COLORS = {
+  good: { stroke: "rgba(52, 211, 153, 0.7)", width: 6 },       // green
+  warning: { stroke: "rgba(251, 191, 36, 0.7)", width: 6 },     // amber
+  critical: { stroke: "rgba(239, 68, 68, 0.7)", width: 6 },     // red
+};
+
 export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
   telemetry: TelemetryPacket[];
   cursorIdx: number;
@@ -17,6 +30,8 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
   boundaries: { leftEdge: Point[]; rightEdge: Point[]; centerLine: Point[]; pitLane: Point[] | null; coordSystem: string } | null;
   sectors: { s1End: number; s2End: number } | null;
   segments: { type: string; name: string; startFrac: number; endFrac: number }[] | null;
+  highlights?: TrackHighlight[] | null;
+  showInputs?: boolean;
   rotateWithCar: boolean;
   zoom?: number;
   containerHeight?: number;
@@ -27,6 +42,8 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
   boundaries,
   sectors,
   segments,
+  highlights,
+  showInputs,
   rotateWithCar,
   zoom = 1,
   containerHeight,
@@ -38,7 +55,7 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
   // Store transform info so car overlay can draw without redrawing everything
   const transformRef = useRef<{
     w: number; h: number; offsetX: number; offsetZ: number; scale: number; maxX: number; minZ: number;
-    displayOutline: Point[];
+    displayOutline: Point[]; offW: number; offH: number;
   } | null>(null);
   // Offscreen canvas caching the static track drawing (boundaries, segments, sectors, labels)
   const offscreenRef = useRef<OffscreenCanvas | null>(null);
@@ -56,9 +73,10 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
     const w = rect.width;
     const h = rect.height;
 
-    const telemetryPoints = telemetry
-      .filter((p) => p.PositionX !== 0 || p.PositionZ !== 0)
-      .map((p) => ({ x: p.PositionX, z: p.PositionZ }));
+    const telemetryPointsWithIdx = telemetry
+      .map((p, idx) => ({ x: p.PositionX, z: p.PositionZ, idx }))
+      .filter((p) => p.x !== 0 || p.z !== 0);
+    const telemetryPoints = telemetryPointsWithIdx as { x: number; z: number }[];
     const displayOutline: Point[] = telemetryPoints.length > 2 ? telemetryPoints : (outline ?? []);
 
     if (displayOutline.length < 2) {
@@ -81,23 +99,31 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
     }
     const rangeX = (maxX - minX) || 1;
     const rangeZ = (maxZ - minZ) || 1;
-    const padding = rotateWithCar ? 60 : 24;
+    const padding = 40;
     const baseScale = Math.min(
       (w - padding * 2) / rangeX,
       (h - padding * 2) / rangeZ
     );
-    const scale = baseScale * zoom * (rotateWithCar ? 3 : 1);
-    const offsetX = (w - rangeX * scale) / 2;
-    const offsetZ = (h - rangeZ * scale) / 2;
+    const followZoom = rotateWithCar ? 3 : 1;
+    const scale = baseScale * zoom * followZoom;
 
-    transformRef.current = { w, h, offsetX, offsetZ, scale, maxX, minZ, displayOutline };
+    // For follow view, the zoomed track is larger than the canvas.
+    // Size the offscreen to fit the full track at the zoomed scale.
+    const trackW = rangeX * scale + padding * 2;
+    const trackH = rangeZ * scale + padding * 2;
+    const offW = Math.max(w, trackW);
+    const offH = Math.max(h, trackH);
+    const offsetX = (offW - rangeX * scale) / 2;
+    const offsetZ = (offH - rangeZ * scale) / 2;
+
+    transformRef.current = { w, h, offsetX, offsetZ, scale, maxX, minZ, displayOutline, offW, offH };
 
     function toCanvas(x: number, z: number): [number, number] {
       return [offsetX + (maxX - x) * scale, offsetZ + (z - minZ) * scale];
     }
 
-    // Create offscreen canvas at full DPR resolution
-    const offscreen = new OffscreenCanvas(canvas.width, canvas.height);
+    // Create offscreen canvas large enough for the full track at zoom scale
+    const offscreen = new OffscreenCanvas(offW * dpr, offH * dpr);
     const ctx = offscreen.getContext("2d")!;
     ctx.scale(dpr, dpr);
 
@@ -131,10 +157,10 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       ctx.stroke();
     }
 
-    // Draw track outline (thick dark)
+    // Draw track outline
     ctx.beginPath();
-    ctx.strokeStyle = "#334155";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = showInputs ? "#475569" : "#334155";
+    ctx.lineWidth = showInputs ? 0.75 : 4;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     const [sx, sy] = toCanvas(displayOutline[0].x, displayOutline[0].z);
@@ -165,14 +191,8 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       return lo;
     }
 
-    // Colored segments
-    if (segments && segments.length > 0) {
-      let sNum = 1;
-      const segDisplayNames = segments.map((s) => {
-        if (s.type === "straight" && (!s.name || /^S[\d?]*$/.test(s.name))) return `S${sNum++}`;
-        if (s.type === "straight") sNum++;
-        return s.name;
-      });
+    // Colored segments (no labels — keeps the map clean; hidden when inputs overlay is active)
+    if (segments && segments.length > 0 && !showInputs) {
       for (let si = 0; si < segments.length; si++) {
         const seg = segments[si];
         const startIdx = fracToIdx(seg.startFrac);
@@ -189,22 +209,6 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
           ctx.lineTo(px, py);
         }
         ctx.stroke();
-        const displayName = segDisplayNames[si];
-        const midIdx = Math.round((startIdx + endIdx) / 2);
-        const midPt = displayOutline[Math.min(midIdx, n - 1)];
-        if (midPt && displayName) {
-          const [lx, ly] = toCanvas(midPt.x, midPt.z);
-          ctx.font = "bold 16px monospace";
-          ctx.textAlign = "center";
-          const textWidth = ctx.measureText(displayName).width;
-          const padX = 6, padY = 5;
-          ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
-          ctx.beginPath();
-          ctx.roundRect(lx - textWidth / 2 - padX, ly - 18 - 12 - padY, textWidth + padX * 2, 20 + padY * 2, 4);
-          ctx.fill();
-          ctx.fillStyle = seg.type === "corner" ? "#fbbf24" : "#60a5fa";
-          ctx.fillText(displayName, lx, ly - 18);
-        }
       }
     } else {
       ctx.beginPath();
@@ -217,6 +221,28 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       }
       if (outline) ctx.lineTo(sx, sy);
       ctx.stroke();
+    }
+
+    // AI analysis highlights (problem/good zones)
+    if (highlights && highlights.length > 0) {
+      for (const hl of highlights) {
+        const startIdx = fracToIdx(hl.startFrac);
+        const endIdx = fracToIdx(hl.endFrac);
+        if (startIdx >= endIdx) continue;
+        const style = HIGHLIGHT_COLORS[hl.color];
+        ctx.beginPath();
+        ctx.strokeStyle = style.stroke;
+        ctx.lineWidth = style.width;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        const [hx, hy] = toCanvas(displayOutline[startIdx].x, displayOutline[startIdx].z);
+        ctx.moveTo(hx, hy);
+        for (let i = startIdx + 1; i <= endIdx && i < n; i++) {
+          const [px, py] = toCanvas(displayOutline[i].x, displayOutline[i].z);
+          ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
     }
 
     // Start/finish
@@ -265,8 +291,76 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       }
     }
 
+    // Throttle & brake input lines (two parallel lines offset from center)
+    if (showInputs && telemetryPoints.length > 2) {
+      const offsetPx = 1.5; // pixels offset from center line
+      for (let i = 1; i < telemetryPoints.length; i++) {
+        const [x0, y0] = toCanvas(telemetryPoints[i - 1].x, telemetryPoints[i - 1].z);
+        const [x1, y1] = toCanvas(telemetryPoints[i].x, telemetryPoints[i].z);
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 0.01) continue;
+        // Normal perpendicular to track direction
+        const nx = -dy / len;
+        const ny = dx / len;
+
+        const pkt = telemetry[telemetryPointsWithIdx[i].idx];
+        if (!pkt) continue;
+        const throttle = (pkt.Accel ?? 0) / 255;
+        const brake = (pkt.Brake ?? 0) / 255;
+
+        // Throttle line (offset left) — only when input active
+        if (throttle > 0) {
+          ctx.beginPath();
+          ctx.moveTo(x0 + nx * offsetPx, y0 + ny * offsetPx);
+          ctx.lineTo(x1 + nx * offsetPx, y1 + ny * offsetPx);
+          ctx.strokeStyle = `rgba(52, 211, 153, ${throttle})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        // Brake line (offset right) — only when input active
+        if (brake > 0) {
+          ctx.beginPath();
+          ctx.moveTo(x0 - nx * offsetPx, y0 - ny * offsetPx);
+          ctx.lineTo(x1 - nx * offsetPx, y1 - ny * offsetPx);
+          ctx.strokeStyle = `rgba(239, 68, 68, ${brake})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+    }
+
     offscreenRef.current = offscreen;
-  }, [telemetry, outline, boundaries, sectors, segments, rotateWithCar, zoom]);
+
+    // Immediately blit to visible canvas (fixed view only — car view uses compositeTrack with rotation)
+    if (!rotateWithCar) {
+      const mainCtx = canvas.getContext("2d");
+      if (mainCtx) {
+        mainCtx.save();
+        mainCtx.setTransform(1, 0, 0, 1, 0, 0);
+        mainCtx.clearRect(0, 0, canvas.width, canvas.height);
+        mainCtx.restore();
+        mainCtx.save();
+        mainCtx.scale(dpr, dpr);
+        mainCtx.drawImage(offscreen, 0, 0, w, h);
+        mainCtx.restore();
+      }
+    }
+
+    // Clear overlay canvas when in car view (car drawn on main canvas instead)
+    if (rotateWithCar) {
+      const carCanvas = carCanvasRef.current;
+      if (carCanvas) {
+        const carCtx = carCanvas.getContext("2d");
+        if (carCtx) {
+          carCtx.clearRect(0, 0, carCanvas.width, carCanvas.height);
+        }
+      }
+    }
+  // containerHeight triggers redraw on resize (not used directly but signals layout change)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telemetry, outline, boundaries, sectors, segments, rotateWithCar, zoom, highlights, showInputs, containerHeight]);
 
   // Composite the cached offscreen track onto the main canvas, with optional rotation for car-view mode
   const compositeTrack = useCallback((idx: number) => {
@@ -296,8 +390,8 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       }
     }
 
-    // Draw the cached static track
-    ctx.drawImage(offscreen, 0, 0, t.w, t.h);
+    // Draw the cached static track (offscreen may be larger than canvas for follow view)
+    ctx.drawImage(offscreen, 0, 0, t.offW, t.offH);
 
     // Draw car on main canvas (in rotated space so it stays aligned)
     const pkt = telemetry[idx];
@@ -383,49 +477,30 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
   // Imperative cursor update — called from animation loop without React re-render
   const updateCursor = useCallback((idx: number) => {
     if (rotateWithCar) {
-      // Car-view: composite cached track with rotation + draw car (no full redraw)
+      // Car-view: composite cached track with rotation + draw car on main canvas
       compositeTrack(idx);
+    } else {
+      // Fixed view: car drawn on separate overlay canvas only
+      drawCarOverlay(idx);
     }
-    drawCarOverlay(idx);
   }, [rotateWithCar, compositeTrack, drawCarOverlay]);
 
   useImperativeHandle(ref, () => ({ updateCursor }), [updateCursor]);
 
-  // Build offscreen cache + initial composite when data changes
-  useEffect(() => {
+  // Build offscreen cache + blit/composite — useLayoutEffect runs before browser paint (no flash)
+  useLayoutEffect(() => {
     drawStaticTrack();
-  }, [drawStaticTrack]);
-
-  // Composite after offscreen is ready (and on data changes)
-  useEffect(() => {
+    // In car view, composite with rotation after offscreen is ready
     if (rotateWithCar) {
       compositeTrack(cursorIdx);
-    } else {
-      // Fixed view: just blit the offscreen directly
-      const canvas = canvasRef.current;
-      const offscreen = offscreenRef.current;
-      const t = transformRef.current;
-      if (canvas && offscreen && t) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          const dpr = window.devicePixelRatio || 1;
-          ctx.save();
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.restore();
-          ctx.save();
-          ctx.scale(dpr, dpr);
-          ctx.drawImage(offscreen, 0, 0, t.w, t.h);
-          ctx.restore();
-        }
-      }
     }
-  }, [telemetry, outline, boundaries, sectors, segments, rotateWithCar, zoom, containerHeight]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawStaticTrack]);
 
-  // Update car overlay when cursorIdx changes via React state
-  useEffect(() => {
-    drawCarOverlay(cursorIdx);
-  }, [cursorIdx, drawCarOverlay]);
+  // Update car overlay when cursorIdx changes via React state (fixed view only)
+  useLayoutEffect(() => {
+    if (!rotateWithCar) drawCarOverlay(cursorIdx);
+  }, [cursorIdx, drawCarOverlay, rotateWithCar]);
 
   // Pulse ring animation on overlay canvas
   useEffect(() => {

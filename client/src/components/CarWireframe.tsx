@@ -11,6 +11,7 @@ import { allWheelStates } from "../lib/vehicle-dynamics";
 import { useUnits } from "../hooks/useUnits";
 import { useSettings } from "../hooks/queries";
 import { useGameId } from "../stores/game";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 
 // ── Tire temp → color ──────────────────────────────────────────────
 
@@ -590,74 +591,81 @@ function TireTrails({
   );
 }
 
-// ── Brake trail (separate line at tail light height) ───────────────
 
-function BrakeTrail({
+// ── Throttle/Brake input overlay (two lines beside driving line) ────
+
+const THROTTLE_COLOR = new THREE.Color("#34d399").convertSRGBToLinear();  // emerald-400 sRGB → linear
+const BRAKE_COLOR = new THREE.Color("#ef4444").convertSRGBToLinear();     // red-500 sRGB → linear
+
+function InputOverlay({
   telemetry,
-  cursorIdx,
+  packet,
 }: {
   telemetry: TelemetryPacket[];
-  cursorIdx: number;
+  packet: TelemetryPacket;
 }) {
-  const trail = useMemo(() => {
-    const cur = telemetry[cursorIdx];
-    if (!cur) return null;
+  const data = useMemo(() => {
+    const cx = packet.PositionX;
+    const cz = packet.PositionZ;
+    const yaw = packet.Yaw;
+    const s = Math.sin(yaw);
+    const c = Math.cos(yaw);
+    const Y = -0.33; // ground level
+    const OFFSET = 0.05; // lateral offset from center in meters
+    const AHEAD = 60;
+    const BEHIND = 20;
+    const maxDist2 = AHEAD * AHEAD;
 
-    const TRAIL_PACKETS = 30;
-    const startIdx = Math.max(0, cursorIdx - TRAIL_PACKETS);
-    if (cursorIdx - startIdx < 2) return null;
-
-    const cx = cur.PositionX;
-    const cz = cur.PositionZ;
-    const cyaw = cur.Yaw;
-    const curSin = Math.sin(cyaw);
-    const curCos = Math.cos(cyaw);
-
-    // Two brake light positions (left z=-0.70, right z=0.70)
-    const lights: { points: [number, number, number][]; colors: THREE.Color[] }[] = [];
-
-    for (const lightZ of [-0.70, 0.70]) {
-      const points: [number, number, number][] = [];
-      const colors: THREE.Color[] = [];
-
-      for (let i = startIdx; i <= cursorIdx; i++) {
-        const p = telemetry[i];
-        if (p.Brake < 10) continue; // only draw when braking
-
-        // World-space offset of brake light: car-local (-2.01, lightZ) rotated by packet yaw
-        const pSin = Math.sin(p.Yaw);
-        const pCos = Math.cos(p.Yaw);
-        const lightWorldX = p.PositionX + (-2.01) * pSin + lightZ * pCos;
-        const lightWorldZ = p.PositionZ + (-2.01) * pCos - lightZ * pSin;
-
-        // Transform to current car-local frame
-        const dx = lightWorldX - cx;
-        const dz = lightWorldZ - cz;
-        const localFwd = dx * curSin + dz * curCos;
-        const localLat = dx * curCos - dz * curSin;
-
-        points.push([localFwd, 0.22, localLat]);
-        colors.push(brakeColor(p.Brake));
-      }
-
-      if (points.length > 1) lights.push({ points, colors });
+    // Collect in-range points with their local coords and input values
+    const pts: { fwd: number; lat: number; throttle: number; brake: number }[] = [];
+    for (const p of telemetry) {
+      const dx = p.PositionX - cx;
+      const dz = p.PositionZ - cz;
+      if (dx * dx + dz * dz > maxDist2) continue;
+      const localFwd = dx * s + dz * c;
+      const localLat = dx * c - dz * s;
+      if (localFwd < -BEHIND || localFwd > AHEAD || Math.abs(localLat) > 30) continue;
+      pts.push({ fwd: localFwd, lat: localLat, throttle: (p.Accel ?? 0) / 255, brake: (p.Brake ?? 0) / 255 });
     }
 
-    return lights;
-  }, [telemetry, cursorIdx]);
+    // Compute perpendicular normals and build offset lines
+    const throttlePts: [number, number, number][] = [];
+    const throttleCols: THREE.Color[] = [];
+    const brakePts: [number, number, number][] = [];
+    const brakeCols: THREE.Color[] = [];
 
-  if (!trail || trail.length === 0) return null;
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[Math.max(0, i - 1)];
+      const next = pts[Math.min(pts.length - 1, i + 1)];
+      const tFwd = next.fwd - prev.fwd;
+      const tLat = next.lat - prev.lat;
+      const len = Math.sqrt(tFwd * tFwd + tLat * tLat) || 1;
+      // Normal perpendicular to tangent (rotated 90°)
+      const nFwd = -tLat / len;
+      const nLat = tFwd / len;
+
+      const p = pts[i];
+      if (p.throttle > 0) {
+        throttlePts.push([p.fwd + nFwd * OFFSET, Y, p.lat + nLat * OFFSET]);
+        throttleCols.push(new THREE.Color(0, 0, 0).lerp(THROTTLE_COLOR, p.throttle));
+      }
+      if (p.brake > 0) {
+        brakePts.push([p.fwd - nFwd * OFFSET, Y, p.lat - nLat * OFFSET]);
+        brakeCols.push(new THREE.Color(0, 0, 0).lerp(BRAKE_COLOR, p.brake));
+      }
+    }
+
+    return { throttlePts, throttleCols, brakePts, brakeCols };
+  }, [telemetry, packet.PositionX, packet.PositionZ, packet.Yaw]);
 
   return (
     <>
-      {trail.map((t, i) => (
-        <Line
-          key={`brake-${i}`}
-          points={t.points}
-          vertexColors={t.colors}
-          lineWidth={4}
-        />
-      ))}
+      {data.throttlePts.length > 1 && (
+        <Line points={data.throttlePts} vertexColors={data.throttleCols} lineWidth={3} transparent opacity={0.9} />
+      )}
+      {data.brakePts.length > 1 && (
+        <Line points={data.brakePts} vertexColors={data.brakeCols} lineWidth={3} transparent opacity={0.9} />
+      )}
     </>
   );
 }
@@ -1296,8 +1304,8 @@ function CarScene({ packet: packetProp, telemetry, cursorIdx, outline, boundarie
       {/* Tire trails (ground, colored by slip) */}
       {toggles.trails && <TireTrails telemetry={telemetry} cursorIdx={cursorIdx} carModel={carModel} />}
 
-      {/* Brake trail (tail light height, only when braking) */}
-      {toggles.brakeTrails && <BrakeTrail telemetry={telemetry} cursorIdx={cursorIdx} />}
+      {/* Throttle/brake input overlay */}
+      {toggles.inputs && <InputOverlay telemetry={telemetry} packet={packet} />}
 
 
       {/* Camera controls */}
@@ -1312,7 +1320,7 @@ interface ViewToggles {
   solid: "wire" | "solid" | "hidden";
   springs: boolean;
   trails: boolean;
-  brakeTrails: boolean;
+  inputs: boolean;
   track: boolean;
   grid: boolean;
   drivetrain: boolean;
@@ -1323,7 +1331,7 @@ const DEFAULT_TOGGLES: ViewToggles = {
   solid: "wire" as const,
   springs: true,
   trails: true,
-  brakeTrails: true,
+  inputs: false,
   track: true,
   grid: true,
   drivetrain: true,
@@ -1407,12 +1415,10 @@ export const CarWireframe = React.memo(function CarWireframe({
   const [editMode, setEditMode] = useState(false);
   const [modelOffsetX, setModelOffsetX] = useState(carModel.glbOffsetX ?? 0);
   const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
-  const throttlePct = (packet.Accel / 255) * 100;
-  const brakePct = (packet.Brake / 255) * 100;
-  const [toggles, setToggles] = useState<ViewToggles>(() => ({
+  const [toggles, setToggles] = useLocalStorage<ViewToggles>("carwireframe-toggles", {
     ...DEFAULT_TOGGLES,
     dimensions: showDimensions ?? false,
-  }));
+  });
   const [viewPreset, setViewPreset] = useState<ViewPreset>("3/4");
 
   const toggle = (key: keyof ViewToggles) =>
@@ -1459,7 +1465,7 @@ export const CarWireframe = React.memo(function CarWireframe({
         />
         {!minimal && <ToggleButton label="Springs" active={toggles.springs} onClick={() => toggle("springs")} />}
         {!minimal && <ToggleButton label="Trails" active={toggles.trails} onClick={() => toggle("trails")} />}
-        {!minimal && <ToggleButton label="Brake" active={toggles.brakeTrails} onClick={() => toggle("brakeTrails")} />}
+        {!minimal && <ToggleButton label="Inputs" active={toggles.inputs} onClick={() => toggle("inputs")} />}
         {!minimal && <ToggleButton label="Track" active={toggles.track} onClick={() => toggle("track")} />}
         {!minimal && <ToggleButton label="Grid" active={toggles.grid} onClick={() => toggle("grid")} />}
         {!minimal && <ToggleButton label="Drive" active={toggles.drivetrain} onClick={() => toggle("drivetrain")} />}
@@ -1474,39 +1480,6 @@ export const CarWireframe = React.memo(function CarWireframe({
           ))}
         </div>
 
-        {/* Steering wheel + bar */}
-        {!minimal && (
-          <div className="flex flex-col items-center gap-1">
-            {/* Steering wheel */}
-            <svg
-              width="44" height="44" viewBox="-22 -22 44 44"
-              style={{ transform: `rotate(${(packet.Steer / 127) * 180}deg)` }}
-            >
-              <circle cx="0" cy="0" r="18" fill="none" stroke="#64748b" strokeWidth="3" opacity="0.6" />
-              <line x1="-12" y1="0" x2="-6" y2="0" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
-              <line x1="6" y1="0" x2="12" y2="0" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
-              <line x1="0" y1="6" x2="0" y2="12" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
-              <circle cx="0" cy="0" r="3" fill="#475569" />
-              {/* Top marker */}
-              <line x1="0" y1="-18" x2="0" y2="-14" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <div className="relative bg-app-surface-alt/60 rounded-sm" style={{ width: 80, height: 8 }}>
-              {/* Center mark */}
-              <div className="absolute left-1/2 top-0 w-px h-full bg-app-text-dim/40" />
-              {/* Dot — Steer is -127 (left) to 127 (right) */}
-              <div
-                className="absolute top-1/2 w-2.5 h-2.5 rounded-full bg-cyan-400 border border-cyan-300 shadow-sm shadow-cyan-400/50"
-                style={{
-                  left: `${50 + (packet.Steer / 127) * 50}%`,
-                  transform: "translate(-50%, -50%)",
-                }}
-              />
-            </div>
-            <span className="text-[9px] font-mono text-app-text-secondary tabular-nums">
-              {packet.Steer > 0 ? "R" : packet.Steer < 0 ? "L" : ""} {Math.abs(packet.Steer / 127 * 180).toFixed(0)}&deg;
-            </span>
-          </div>
-        )}
       </div>}
 
       {/* Model edit controls (minimal/car viewer mode) */}
@@ -1573,25 +1546,7 @@ export const CarWireframe = React.memo(function CarWireframe({
         </div>
       )}
 
-      {/* Throttle / Brake overlay */}
-      {!minimal && (
-      <div className="absolute bottom-2 right-2 flex gap-1 items-end" style={{ height: 60 }}>
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] font-mono text-emerald-400 font-bold tabular-nums">{throttlePct.toFixed(0)}</span>
-          <div className="w-4 bg-app-surface-alt/60 rounded-sm overflow-hidden relative" style={{ height: 44 }}>
-            <div className="absolute bottom-0 w-full bg-emerald-400 rounded-sm transition-all" style={{ height: `${throttlePct}%` }} />
-          </div>
-          <span className="text-[7px] text-app-text-muted">T</span>
-        </div>
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] font-mono text-red-400 font-bold tabular-nums">{brakePct.toFixed(0)}</span>
-          <div className="w-4 bg-app-surface-alt/60 rounded-sm overflow-hidden relative" style={{ height: 44 }}>
-            <div className="absolute bottom-0 w-full bg-red-500 rounded-sm transition-all" style={{ height: `${brakePct}%` }} />
-          </div>
-          <span className="text-[7px] text-app-text-muted">B</span>
-        </div>
-      </div>
-      )}
+      {/* Input bars removed — shown on 2D track map panel + 3D input overlay */}
     </div>
   );
 });

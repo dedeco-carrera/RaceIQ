@@ -3,8 +3,8 @@ import { useSearch, useNavigate } from "@tanstack/react-router";
 import type { TelemetryPacket, LapMeta } from "@shared/types";
 import { convertTemp } from "../lib/temperature";
 import { useCookieState } from "../hooks/useCookieState";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 import { formatLapTime, TireDiagram, GForceCircle } from "./LiveTelemetry";
-import { SteeringWheel } from "./SteeringWheel";
 import { getSteeringLock } from "./Settings";
 import { Compass } from "./Compass";
 import { BodyAttitude } from "./BodyAttitude";
@@ -25,8 +25,8 @@ import { client } from "../lib/rpc";
 import { useGameId } from "../stores/game";
 import { analyzeLap } from "../lib/lap-insights";
 import { InsightPanel } from "./InsightPanel";
-import { AiAnalysisModal } from "./AiAnalysisModal";
-import { Sparkles } from "lucide-react";
+import { AiPanel, type AnalysisHighlight, type AiPanelHandle } from "./AiPanel";
+import { Sparkles, Settings2, Info } from "lucide-react";
 import { SearchSelect } from "./ui/SearchSelect";
 import { WeatherWidget } from "./analyse/WeatherWidget";
 import { F1SetupModal } from "./analyse/F1SetupModal";
@@ -40,6 +40,41 @@ import { TuneViewModal } from "./analyse/TuneViewModal";
 
 // Stable empty array to avoid re-renders when no telemetry loaded
 const emptyTelemetry: TelemetryPacket[] = [];
+
+function AiPanelMenu({ onClearChat, onClearAnalysis, onClearAll }: { onClearChat: () => void; onClearAnalysis: () => void; onClearAll: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen((v) => !v)} className="text-app-text-muted hover:text-app-text transition-colors" title="Manage">
+        <Settings2 className="size-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-app-surface border border-app-border-input rounded-lg shadow-xl py-1 min-w-[160px]">
+          <button onClick={() => { onClearChat(); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-[11px] text-app-text-secondary hover:text-app-text hover:bg-app-surface-alt transition-colors">
+            Clear chat only
+          </button>
+          <button onClick={() => { onClearAnalysis(); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-[11px] text-app-text-secondary hover:text-app-text hover:bg-app-surface-alt transition-colors">
+            Clear analysis (keep chat)
+          </button>
+          <div className="border-t border-app-border-input my-1" />
+          <button onClick={() => { onClearAll(); setOpen(false); }} className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:text-red-300 hover:bg-app-surface-alt transition-colors">
+            Clear all
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Main Component ───────────────────────────────────────────────────
 
@@ -66,32 +101,39 @@ export function LapAnalyse() {
   const { data: outlineRaw } = useTrackOutline(trackOrd ?? undefined);
   const outline = useMemo(() => {
     if (!outlineRaw) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const d = outlineRaw as any;
     if (d?.points && Array.isArray(d.points)) return d.points as Point[];
     if (Array.isArray(d)) return d as Point[];
     return null;
   }, [outlineRaw]);
   const { data: boundariesRaw } = useTrackBoundaries(trackOrd ?? undefined);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const boundaries = (boundariesRaw as any) ?? null;
   const { data: sectorsRaw } = useTrackSectorBoundaries(trackOrd ?? undefined);
   const sectors = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = sectorsRaw as any;
     return s?.s1End ? s as { s1End: number; s2End: number } : null;
   }, [sectorsRaw]);
   const { data: segmentsRaw } = useTrackSectors(trackOrd ?? undefined);
   const segments = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = segmentsRaw as any;
-    return s?.segments ? s.segments as { type: string; name: string; startFrac: number; endFrac: number }[] : null;
+    return s?.segments ? (s.segments as { type: string; name: string; startFrac: number; endFrac: number }[]) : null;
   }, [segmentsRaw]);
 
   const [carName, setCarName] = useState("");
   const [trackName, setTrackName] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const initialCursor = (search as any).cursor as number | undefined;
   const [cursorIdx, setCursorIdx] = useState(0);
   // Visual time fraction override — set during scrubbing through gaps
   // null = use cursorIdx's time fraction, number = override position
   const [visualTimeFrac, setVisualTimeFrac] = useState<number | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"live" | "insights">("live");
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vizParam = (search as any).viz as string | undefined;
   const [vizMode, setWheelTab] = useCookieState<"2d" | "3d">("analyse-vizMode", "2d");
   // URL ?viz= param overrides cookie on mount
@@ -106,12 +148,15 @@ export function LapAnalyse() {
   const [leftColWidth, setLeftColWidth] = useCookieState("analyse-leftCol", 150);
   const [rightColWidth, setRightColWidth] = useCookieState("analyse-rightCol", 650);
   const [playing, setPlaying] = useState(false);
-  const [rotateWithCar, setRotateWithCar] = useState(false);
-  const [mapZoom, setMapZoom] = useState(1);
+  const [rotateWithCar, setRotateWithCar] = useLocalStorage("analyse-rotateWithCar", false);
+  const [showInputs, setShowInputs] = useLocalStorage("analyse-showInputs", false);
+  const [mapZoom, setMapZoom] = useLocalStorage("analyse-mapZoom", 1);
   const [topHeight, setTopHeight] = useCookieState("analyse-topHeight", 500);
   const loading = lapLoading;
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useCookieState("analyse-aiPanel", false);
+  const [aiHighlights, setAiHighlights] = useState<AnalysisHighlight[] | null>(null);
+  const aiPanelRef = useRef<AiPanelHandle>(null);
   const [viewingTuneId, setViewingTuneId] = useState<number | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   // Actual driving line from telemetry positions (for 3D visual)
@@ -130,7 +175,7 @@ export function LapAnalyse() {
   const speedRef = useRef(1);
   const cursorRef = useRef(0);
   const displayTelemetryRef = useRef(displayTelemetry);
-  displayTelemetryRef.current = displayTelemetry;
+  useEffect(() => { displayTelemetryRef.current = displayTelemetry; }, [displayTelemetry]);
   const seekRef = useRef(0);
 
   // Imperative refs for smooth animation without React re-renders
@@ -379,6 +424,9 @@ export function LapAnalyse() {
           return next;
         });
       } else if (e.key === " ") {
+        // Don't capture space when typing in an input/textarea
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
         e.preventDefault();
         setPlaying((p) => !p);
       }
@@ -452,12 +500,14 @@ export function LapAnalyse() {
   // Tune selector
   const { data: availableTunes } = useQuery({
     queryKey: ["tunes", selectedLap?.carOrdinal],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     queryFn: () => client.api.tunes.$get({ query: { carOrdinal: selectedLap?.carOrdinal != null ? String(selectedLap.carOrdinal) : undefined } }).then((r) => r.json() as any),
     enabled: !!selectedLap?.carOrdinal,
   });
 
   const updateLapTune = useMutation({
     mutationFn: (tuneId: number | null) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       client.api.laps[":id"].tune.$patch({ param: { id: String(selectedLapId) }, json: { tuneId } }).then((r) => r.json() as any),
     onMutate: (tuneId) => {
       // Optimistically update local laps state so dropdown doesn't reset
@@ -630,11 +680,15 @@ export function LapAnalyse() {
           )}
           {telemetry.length > 0 && (
             <button
-              onClick={() => setAiModalOpen(true)}
-              className="flex items-center gap-1.5 text-xs text-app-text-secondary hover:text-amber-400 border border-app-border-input rounded px-3 py-1.5 transition-colors"
+              onClick={() => setAiPanelOpen((v) => !v)}
+              className={`flex items-center gap-1.5 text-xs border rounded px-3 py-1.5 transition-colors ${
+                aiPanelOpen
+                  ? "text-amber-400 border-amber-400/40 bg-amber-400/10"
+                  : "text-app-text-secondary hover:text-amber-400 border-app-border-input"
+              }`}
             >
               <Sparkles className="size-3" />
-              AI Analysis
+              AI
             </button>
           )}
           {loading && (
@@ -659,30 +713,6 @@ export function LapAnalyse() {
           <div className="flex shrink-0 overflow-hidden" style={{ height: topHeight }}>
             {/* Segment table + legend */}
             <div className="border-r border-app-border overflow-y-auto p-2 shrink-0" style={{ height: "100%", width: leftColWidth }}>
-              {/* Sector times */}
-              {sectorData && (
-                <div className="mb-2 pb-2 border-b border-app-border">
-                  <div className="text-[10px] text-app-text-muted uppercase tracking-wider font-semibold mb-1.5">Sectors</div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["S1", "S2", "S3"] as const).map((name, i) => {
-                      const time = sectorData.times[i];
-                      const isActive = sectorTimes?.cursorSector === i;
-                      const colors = ["#ef4444", "#3b82f6", "#eab308"];
-                      return (
-                        <div key={name} className={`rounded px-1.5 py-1 ${isActive ? "bg-app-surface-alt ring-1 ring-inset" : ""}`} style={isActive ? { "--tw-ring-color": colors[i] } as React.CSSProperties : {}}>
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colors[i] }} />
-                            <span className="text-[9px] font-bold text-app-text-muted">{name}</span>
-                          </div>
-                          <div className="text-sm font-mono font-bold tabular-nums text-app-text">
-                            {time > 0 ? formatLapTime(time) : "—"}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               {/* Legend */}
               <div className="flex flex-wrap items-center gap-3 mb-2 pb-2 border-b border-app-border">
                 <div className="flex items-center gap-1">
@@ -718,7 +748,15 @@ export function LapAnalyse() {
             />
 
             {/* Track map */}
-            <div className="border-r border-app-border bg-app-bg p-2 relative flex-1 min-w-0" style={{ height: "100%" }}>
+            <div
+              className="border-r border-app-border bg-app-bg p-2 relative flex-1 min-w-0"
+              style={{ height: "100%" }}
+              onWheel={(e) => {
+                if (!rotateWithCar) return;
+                e.preventDefault();
+                setMapZoom((z) => Math.max(0.5, Math.min(4, z - e.deltaY * 0.001)));
+              }}
+            >
               <AnalyseTrackMap
                 ref={trackMapRef}
                 telemetry={telemetry}
@@ -727,6 +765,8 @@ export function LapAnalyse() {
                 boundaries={boundaries}
                 sectors={sectors}
                 segments={segments}
+                highlights={aiPanelOpen ? aiHighlights : null}
+                showInputs={showInputs}
                 rotateWithCar={rotateWithCar}
                 zoom={mapZoom}
                 containerHeight={topHeight}
@@ -734,9 +774,32 @@ export function LapAnalyse() {
               {/* Weather widget — top left (updates at cursor position) */}
               {telemetry[cursorIdx]?.f1 && <WeatherWidget f1={telemetry[cursorIdx].f1!} />}
 
-              {/* Map controls overlay — top right */}
+              {/* View toggles — top left (matches 3D panel style) */}
+              <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                <button
+                  onClick={() => setRotateWithCar((r) => !r)}
+                  className={`px-2 py-1 text-[9px] uppercase tracking-wider font-semibold rounded border transition-colors ${
+                    rotateWithCar
+                      ? "bg-cyan-900/50 border-cyan-700 text-app-accent"
+                      : "bg-app-surface-alt/80 border-app-border-input text-app-text-muted hover:text-app-text"
+                  }`}
+                >
+                  {rotateWithCar ? "Follow" : "Fixed"}
+                </button>
+                <button
+                  onClick={() => setShowInputs((v) => !v)}
+                  className={`px-2 py-1 text-[9px] uppercase tracking-wider font-semibold rounded border transition-colors ${
+                    showInputs
+                      ? "bg-cyan-900/50 border-cyan-700 text-app-accent"
+                      : "bg-app-surface-alt/80 border-app-border-input text-app-text-muted hover:text-app-text"
+                  }`}
+                >
+                  Inputs
+                </button>
+              </div>
+
+              {/* Right side controls */}
               <div className="absolute top-2 right-2 flex items-start gap-2">
-                {/* Zoom controls — only in car view */}
                 {rotateWithCar && (
                   <div className="flex flex-col gap-1">
                     <button
@@ -749,21 +812,54 @@ export function LapAnalyse() {
                     >-</button>
                   </div>
                 )}
-                {/* View toggle */}
-                <button
-                  onClick={() => setRotateWithCar((r) => !r)}
-                  className={`px-2 py-1 text-[10px] rounded border transition-colors ${
-                    rotateWithCar
-                      ? "bg-cyan-900/50 border-cyan-700 text-app-accent"
-                      : "bg-app-surface-alt/80 border-app-border-input text-app-text-secondary hover:text-app-text"
-                  }`}
-                  title="Rotate map to follow car direction"
-                >
-                  {rotateWithCar ? "Car View" : "Fixed View"}
-                </button>
-                {/* Compass */}
                 {currentPacket && <Compass yaw={currentPacket.Yaw} />}
               </div>
+
+              {/* Steering wheel + pedal bars — bottom right */}
+              {currentPacket && (
+                <div className="absolute bottom-2 right-2 flex flex-col items-center gap-1">
+                  <svg
+                    width="44" height="44" viewBox="-22 -22 44 44"
+                    style={{ transform: `rotate(${(currentPacket.Steer / 127) * 180}deg)` }}
+                  >
+                    <circle cx="0" cy="0" r="18" fill="none" stroke="#64748b" strokeWidth="3" opacity="0.6" />
+                    <line x1="-12" y1="0" x2="-6" y2="0" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                    <line x1="6" y1="0" x2="12" y2="0" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                    <line x1="0" y1="6" x2="0" y2="12" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                    <circle cx="0" cy="0" r="3" fill="#475569" />
+                    <line x1="0" y1="-18" x2="0" y2="-14" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <div className="relative bg-app-surface-alt/60 rounded-sm" style={{ width: 80, height: 8 }}>
+                    <div className="absolute left-1/2 top-0 w-px h-full bg-app-text-dim/40" />
+                    <div
+                      className="absolute top-1/2 w-2.5 h-2.5 rounded-full bg-cyan-400 border border-cyan-300 shadow-sm shadow-cyan-400/50"
+                      style={{
+                        left: `${50 + (currentPacket.Steer / 127) * 50}%`,
+                        transform: "translate(-50%, -50%)",
+                      }}
+                    />
+                  </div>
+                  <span className="text-[9px] font-mono text-app-text-secondary tabular-nums">
+                    {currentPacket.Steer > 0 ? "R" : currentPacket.Steer < 0 ? "L" : ""} {Math.abs(currentPacket.Steer / 127 * 180).toFixed(0)}&deg;
+                  </span>
+                  <div className="flex gap-1 items-end" style={{ height: 60 }}>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-[9px] font-mono font-bold tabular-nums" style={{ color: brakeBarColor(currentPacket.Brake) }}>{((currentPacket.Brake / 255) * 100).toFixed(0)}</span>
+                      <div className="w-4 bg-app-surface-alt/60 rounded-sm overflow-hidden relative" style={{ height: 40 }}>
+                        <div className="absolute bottom-0 w-full rounded-sm transition-all" style={{ height: `${(currentPacket.Brake / 255) * 100}%`, background: `linear-gradient(to top, #ff9933, ${brakeBarColor(currentPacket.Brake)})` }} />
+                      </div>
+                      <span className="text-[7px] text-app-text-muted">B</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-[9px] font-mono text-emerald-400 font-bold tabular-nums">{((currentPacket.Accel / 255) * 100).toFixed(0)}</span>
+                      <div className="w-4 bg-app-surface-alt/60 rounded-sm overflow-hidden relative" style={{ height: 40 }}>
+                        <div className="absolute bottom-0 w-full bg-emerald-400 rounded-sm transition-all" style={{ height: `${(currentPacket.Accel / 255) * 100}%` }} />
+                      </div>
+                      <span className="text-[7px] text-app-text-muted">T</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right resize handle */}
@@ -822,24 +918,6 @@ export function LapAnalyse() {
                   )}
                   {currentPacket && (
                     <div className="flex items-center gap-2">
-                      {/* Pedal bars */}
-                      <div className="flex gap-1 items-end shrink-0" style={{ height: 80 }}>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-[9px] font-mono text-emerald-400 font-bold tabular-nums">{((currentPacket.Accel / 255) * 100).toFixed(0)}</span>
-                          <div className="w-5 bg-app-surface-alt rounded-sm overflow-hidden relative" style={{ height: 60 }}>
-                            <div className="absolute bottom-0 w-full bg-emerald-400 rounded-sm transition-all" style={{ height: `${(currentPacket.Accel / 255) * 100}%` }} />
-                          </div>
-                          <span className="text-[8px] text-app-text-muted">T</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-[9px] font-mono font-bold tabular-nums" style={{ color: brakeBarColor(currentPacket.Brake) }}>{((currentPacket.Brake / 255) * 100).toFixed(0)}</span>
-                          <div className="w-5 bg-app-surface-alt rounded-sm overflow-hidden relative" style={{ height: 60 }}>
-                            <div className="absolute bottom-0 w-full rounded-sm transition-all" style={{ height: `${(currentPacket.Brake / 255) * 100}%`, background: `linear-gradient(to top, #ff9933, ${brakeBarColor(currentPacket.Brake)})` }} />
-                          </div>
-                          <span className="text-[8px] text-app-text-muted">B</span>
-                        </div>
-                      </div>
-                      <SteeringWheel steer={currentPacket.Steer} rpm={currentPacket.CurrentEngineRpm} maxRpm={currentPacket.EngineMaxRpm} />
                       <GForceCircle packet={currentPacket} />
                     </div>
                   )}
@@ -993,15 +1071,11 @@ export function LapAnalyse() {
                         )}
                         {/* G-Force */}
                         <div className="flex justify-between">
-                          <span className="text-app-text-muted">Lat G</span>
-                          <span className="tabular-nums" style={{ color: latG > 1.5 ? "#ef4444" : latG > 0.8 ? "#fbbf24" : "#34d399" }}>
-                            {latG.toFixed(2)}g
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-app-text-muted">Lon G</span>
-                          <span className="tabular-nums" style={{ color: lonG < -0.5 ? "#ef4444" : lonG > 0.3 ? "#34d399" : "#94a3b8" }}>
-                            {lonG > 0 ? "+" : ""}{lonG.toFixed(2)}g
+                          <span className="text-app-text-muted">G-Force</span>
+                          <span className="tabular-nums text-app-text">
+                            Lat {latG.toFixed(2)}g
+                            <span className="text-app-text-dim"> </span>
+                            Lon {lonG > 0 ? "+" : ""}{lonG.toFixed(2)}g
                           </span>
                         </div>
                         {/* Grip / slip ratios — Forza has real data, F1 skips */}
@@ -1019,17 +1093,34 @@ export function LapAnalyse() {
                                 <span style={{ color: frictionUtilColor(fc.rr) }}>RR {(fc.rr * 100).toFixed(0)}%</span>
                               </span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-app-text-muted">Slip Ratio</span>
-                              <span className="tabular-nums">
-                                <span style={{ color: slipRatioColor(ws.fl.slipRatio) }}>FL {(ws.fl.slipRatio * 100).toFixed(0)}</span>
-                                <span className="text-app-text-dim"> </span>
-                                <span style={{ color: slipRatioColor(ws.fr.slipRatio) }}>FR {(ws.fr.slipRatio * 100).toFixed(0)}</span>
-                                <span className="text-app-text-dim"> </span>
-                                <span style={{ color: slipRatioColor(ws.rl.slipRatio) }}>RL {(ws.rl.slipRatio * 100).toFixed(0)}</span>
-                                <span className="text-app-text-dim"> </span>
-                                <span style={{ color: slipRatioColor(ws.rr.slipRatio) }}>RR {(ws.rr.slipRatio * 100).toFixed(0)}%</span>
-                              </span>
+                            <div className="border-t border-app-border pt-1">
+                              <div className="text-[10px] text-app-text-muted uppercase tracking-wider mb-1">Slip</div>
+                              <div className="space-y-1">
+                                <div className="flex justify-between">
+                                  <span className="text-app-text-muted">Ratio</span>
+                                  <span className="tabular-nums">
+                                    <span style={{ color: slipRatioColor(ws.fl.slipRatio) }}>FL {(ws.fl.slipRatio * 100).toFixed(0)}</span>
+                                    <span className="text-app-text-dim"> </span>
+                                    <span style={{ color: slipRatioColor(ws.fr.slipRatio) }}>FR {(ws.fr.slipRatio * 100).toFixed(0)}</span>
+                                    <span className="text-app-text-dim"> </span>
+                                    <span style={{ color: slipRatioColor(ws.rl.slipRatio) }}>RL {(ws.rl.slipRatio * 100).toFixed(0)}</span>
+                                    <span className="text-app-text-dim"> </span>
+                                    <span style={{ color: slipRatioColor(ws.rr.slipRatio) }}>RR {(ws.rr.slipRatio * 100).toFixed(0)}%</span>
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-app-text-muted">Angle</span>
+                                  <span className="tabular-nums">
+                                    <SlipAngleValue label="FL" value={currentPacket.TireSlipAngleFL} speedMph={currentPacket.Speed * 2.23694} />
+                                    <span className="text-app-text-dim"> </span>
+                                    <SlipAngleValue label="FR" value={currentPacket.TireSlipAngleFR} speedMph={currentPacket.Speed * 2.23694} />
+                                    <span className="text-app-text-dim"> </span>
+                                    <SlipAngleValue label="RL" value={currentPacket.TireSlipAngleRL} speedMph={currentPacket.Speed * 2.23694} />
+                                    <span className="text-app-text-dim"> </span>
+                                    <SlipAngleValue label="RR" value={currentPacket.TireSlipAngleRR} speedMph={currentPacket.Speed * 2.23694} />
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </>
                         )}
@@ -1175,18 +1266,6 @@ export function LapAnalyse() {
                             <WearValue label="RL" value={currentPacket.TireWearRL} />
                             <WearValue label="RR" value={currentPacket.TireWearRR} />
                           </div>
-                          <div className="text-[10px] text-app-text-muted uppercase tracking-wider mb-1 mt-1">Wear /s</div>
-                          <div className="grid grid-cols-2 gap-x-2">
-                            {(["FL", "FR", "RL", "RR"] as const).map((w) => {
-                              const rate = wearRate ? wearRate[w] * 100 : null;
-                              const color = rate == null || rate < 0.01 ? "#94a3b8" : rate < 0.05 ? "#34d399" : rate < 0.1 ? "#fbbf24" : "#ef4444";
-                              return (
-                                <span key={w} className="text-app-text-secondary">
-                                  {w}: <span className="tabular-nums" style={{ color }}>{rate != null ? rate.toFixed(3) + "%" : "—"}</span>
-                                </span>
-                              );
-                            })}
-                          </div>
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -1200,16 +1279,22 @@ export function LapAnalyse() {
                           </div>
                         </div>
                         <div className="border-t border-app-border pt-1">
-                          <div className="text-[10px] text-app-text-muted uppercase tracking-wider mb-1">Slip Angle</div>
+                          <div className="text-[10px] text-app-text-muted uppercase tracking-wider mb-1">Wear /s</div>
                           <div className="grid grid-cols-2 gap-x-2">
-                            <SlipAngleValue label="FL" value={currentPacket.TireSlipAngleFL} speedMph={currentPacket.Speed * 2.23694} />
-                            <SlipAngleValue label="FR" value={currentPacket.TireSlipAngleFR} speedMph={currentPacket.Speed * 2.23694} />
-                            <SlipAngleValue label="RL" value={currentPacket.TireSlipAngleRL} speedMph={currentPacket.Speed * 2.23694} />
-                            <SlipAngleValue label="RR" value={currentPacket.TireSlipAngleRR} speedMph={currentPacket.Speed * 2.23694} />
+                            {(["FL", "FR", "RL", "RR"] as const).map((w) => {
+                              const rate = wearRate ? wearRate[w] * 100 : null;
+                              const color = rate == null || rate < 0.01 ? "#94a3b8" : rate < 0.05 ? "#34d399" : rate < 0.1 ? "#fbbf24" : "#ef4444";
+                              return (
+                                <span key={w} className="text-app-text-secondary">
+                                  {w}: <span className="tabular-nums" style={{ color }}>{rate != null ? rate.toFixed(3) + "%" : "—"}</span>
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
                     </div>
+
 
                     {/* Brakes — separate section */}
                     {(currentPacket.BrakeTempFrontLeft || currentPacket.f1?.brakeTempFL) ? (
@@ -1235,7 +1320,23 @@ export function LapAnalyse() {
 
                     {/* Suspension — separate section */}
                     <div className="border-t border-app-border pt-2">
-                      <h3 className="text-[10px] text-app-text-muted uppercase tracking-wider mb-2 font-semibold">Suspension</h3>
+                      <div className="flex items-center gap-1 mb-2 group relative">
+                        <h3 className="text-[10px] text-app-text-muted uppercase tracking-wider font-semibold">Suspension</h3>
+                        <Info className="w-3.5 h-3.5 text-app-text-dim cursor-help" />
+                        <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block bg-app-surface-alt border border-app-border-input rounded px-2 py-1 text-[10px] text-app-text-secondary whitespace-nowrap z-10 pointer-events-none">
+                          Load Distribution:<br/>50% = balanced<br/>0% Lon = all front<br/>0% Lat = all left
+                        </div>
+                      </div>
+                      <div className="text-[11px] font-mono mb-2 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-app-text-muted">Load Distribution</span>
+                          <span className="tabular-nums text-app-text">
+                            Lon {((currentPacket.NormSuspensionTravelFL + currentPacket.NormSuspensionTravelFR) / 2 * 100).toFixed(0)}%
+                            <span className="text-app-text-dim"> </span>
+                            Lat {((currentPacket.NormSuspensionTravelFL + currentPacket.NormSuspensionTravelRL) / 2 * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-x-2">
                         <SuspValue label="FL" value={currentPacket.NormSuspensionTravelFL} />
                         <SuspValue label="FR" value={currentPacket.NormSuspensionTravelFR} />
@@ -1281,18 +1382,44 @@ export function LapAnalyse() {
             )}
             </div>
           </div>
+
+          {/* AI panel — analysis + chat */}
+          {aiPanelOpen && selectedLapId && (
+            <div className="w-[22rem] h-full shrink-0 border-l border-app-border bg-app-surface/50 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-app-border shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="size-3 text-amber-400" />
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-app-text">AI Analysis</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AiPanelMenu
+                    onClearChat={() => aiPanelRef.current?.clearChat()}
+                    onClearAnalysis={() => aiPanelRef.current?.clearAnalysis()}
+                    onClearAll={() => aiPanelRef.current?.clearAll()}
+                  />
+                  <button onClick={() => setAiPanelOpen(false)} className="text-app-text-muted hover:text-app-text text-xs">✕</button>
+                </div>
+              </div>
+              <AiPanel
+                ref={aiPanelRef}
+                lapId={selectedLapId}
+                carName={carName}
+                trackName={trackName}
+                segments={segments}
+                panelOpen={aiPanelOpen}
+                onJumpToFrac={(frac) => {
+                  // Convert fractional track distance to telemetry frame index
+                  const idx = Math.round(frac * (telemetry.length - 1));
+                  setCursorIdx(idx);
+                  cursorRef.current = idx;
+                  seekRef.current++;
+                }}
+                onHighlightsChange={setAiHighlights}
+              />
+            </div>
+          )}
         </div>
       )}
-      {selectedLapId && (
-        <AiAnalysisModal
-          lapId={selectedLapId}
-          open={aiModalOpen}
-          onClose={() => setAiModalOpen(false)}
-          carName={carName}
-          trackName={trackName}
-        />
-      )}
-
       {/* Tune viewer modal */}
       {viewingTuneId && (
         <TuneViewModal tuneId={viewingTuneId} onClose={() => setViewingTuneId(null)} />
