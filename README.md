@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/downloads/SpeedHQ/RaceIQ/total?label=downloads" alt="Downloads">
+  <img src="https://img.shields.io/github/downloads/SpeedHQ/RaceIQ/total?style=for-the-badge&color=blue&label=downloads" alt="Downloads">
 </p>
 
 <p align="center">
