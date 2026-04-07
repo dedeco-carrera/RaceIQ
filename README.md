@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/github/downloads/SpeedHQ/RaceIQ/total?label=downloads" alt="Downloads">
+</p>
+
+<p align="center">
   <a href="https://github.com/SpeedHQ/RaceIQ/releases/latest">Download for Windows</a> · <a href="https://www.youtube.com/watch?v=hWuIItofivA">Watch Demo</a> · <a href="assets/screenshots/">Screenshots</a> · <a href="https://discord.gg/ZNXKyYPumT">Discord</a>
 </p>
 
