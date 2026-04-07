@@ -45,6 +45,6 @@
     "drizzle-kit": "^0.31.10",
     "lefthook": "^2.1.4",
     "lighthouse": "^13.0.3",
-    "portless": "^0.9.4"
+    "portless": "^0.10.1"
   }
 }
