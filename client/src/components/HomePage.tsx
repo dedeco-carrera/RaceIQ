@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useTelemetryStore } from "../stores/telemetry";
 import { useLaps, useSettings } from "../hooks/queries";
 import { formatLapTime } from "./LiveTelemetry";
 import { client } from "../lib/rpc";
@@ -102,9 +101,6 @@ export function HomePage() {
   const gameAdapter = gameId ? tryGetGame(gameId) : null;
   const { data: allLaps = [] } = useLaps();
   const { displaySettings } = useSettings();
-  const connected = useTelemetryStore((s) => s.connected);
-  const packetsPerSec = useTelemetryStore((s) => s.packetsPerSec);
-  const serverStatus = useTelemetryStore((s) => s.serverStatus);
   const { data: stats } = useQuery({
     queryKey: ["stats"],
     queryFn: () => client.api.stats.$get({ query: {} }).then((r) => r.json()),
@@ -185,10 +181,6 @@ export function HomePage() {
     };
   }, [allLaps, todayStart, weekAgo, monthAgo, yearAgo]);
 
-  // Session info
-  const sessionTrack = serverStatus?.currentSession?.trackOrdinal;
-  const isLive = connected && packetsPerSec > 0;
-
   // Fetch names for recent laps + favourite cars
   useEffect(() => {
     const carOrds = [...new Set([
@@ -267,12 +259,6 @@ export function HomePage() {
                 </div>
                 <div className="text-base font-bold text-white/90">{gameAdapter?.displayName ?? gameId}</div>
               </div>
-              {isLive && (
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className={`text-sm font-semibold ${t.accent}`}>{packetsPerSec} pkt/s</span>
-                </div>
-              )}
             </div>
           </div>
         );
@@ -284,12 +270,6 @@ export function HomePage() {
             </h1>
             <p className="text-sm text-app-text/90-muted mt-0.5">Dashboard overview</p>
           </div>
-          {isLive && (
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-sm text-app-text/90">Live — {packetsPerSec} pkt/s</span>
-            </div>
-          )}
         </div>
       )}
 
@@ -432,18 +412,6 @@ export function HomePage() {
           );
         })()}
       </div>
-
-      {/* Live session card */}
-      {isLive && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard
-            label="Session"
-            value="Active"
-            sub={sessionTrack ? `Track #${sessionTrack}` : undefined}
-            color="text-emerald-400"
-          />
-        </div>
-      )}
 
       {/* Recent laps */}
       <div>
