@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
 import { client } from "../lib/rpc";
+import { useSettings } from "../hooks/queries";
+import { useUiStore } from "../stores/ui";
 import { Button } from "./ui/button";
 import { toPng } from "html-to-image";
 import Markdown from "react-markdown";
@@ -156,6 +158,10 @@ export interface AiPanelHandle {
 // ── Main component ───────────────────────────────────────────
 
 export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel({ lapId, carName, trackName, segments, onAnalysisLoaded, onJumpToFrac, onHighlightsChange, panelOpen = false }, ref) {
+  const { displaySettings } = useSettings();
+  const openSettings = useUiStore((s) => s.openSettings);
+  const aiConfigured = !!(displaySettings.geminiApiKeySet || displaySettings.openaiApiKeySet);
+
   // Analysis state
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; model: string } | null>(null);
@@ -217,7 +223,7 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
         const data = await res.json().catch(() => ({ error: "Unknown error" })) as { error?: string };
         throw new Error(data.error || `HTTP ${res.status}`);
       }
-      const data = await res.json();
+      const data = await res.json() as { analysis: string | object | null; usage?: { inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; model: string }; cornerFracs?: { label: string; startFrac: number; endFrac: number }[]; hasTune?: boolean };
       const parsed = typeof data.analysis === "string" ? JSON.parse(data.analysis) : data.analysis;
       setAnalysis(parsed);
       if (data.usage) setUsage(data.usage);
@@ -279,11 +285,34 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
     } catch { /* ignore */ }
   }, [lapId]);
 
-  // Load chat on open; analysis is manual-only (user must press button)
+  // Load cached analysis (no AI call — returns null if not cached)
+  const loadCachedAnalysis = useCallback(async () => {
+    try {
+      const res = await client.api.laps[":id"].analyse.$post({
+        param: { id: String(lapId) },
+        query: { cacheOnly: "true" },
+      });
+      if (!res.ok) return;
+      const data = await res.json() as { analysis: string | object | null; cached: boolean; usage?: { inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; model: string }; cornerFracs?: { label: string; startFrac: number; endFrac: number }[]; hasTune?: boolean };
+      if (!data.cached) return;
+      const parsed = typeof data.analysis === "string" ? JSON.parse(data.analysis) : data.analysis;
+      setAnalysis(parsed);
+      if (data.usage) setUsage(data.usage);
+      if (data.cornerFracs) {
+        setCornerFracs(data.cornerFracs.map((c) => ({
+          type: "corner" as const, name: c.label, startFrac: c.startFrac, endFrac: c.endFrac,
+        })));
+      }
+      setHasTune(!!data.hasTune);
+    } catch { /* ignore */ }
+  }, [lapId]);
+
+  // Load chat and cached analysis on open
   useEffect(() => {
     if (!panelOpen) return;
     loadChat();
-  }, [lapId, panelOpen, loadChat]);
+    loadCachedAnalysis();
+  }, [lapId, panelOpen, loadChat, loadCachedAnalysis]);
 
   // Reset on lap change
   useEffect(() => {
@@ -369,6 +398,23 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
     <div className="flex flex-col flex-1 min-h-0">
       {/* Unified conversation */}
       <div className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-2.5">
+        {/* No AI provider configured */}
+        {!aiConfigured && (
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+            <Sparkles className="size-5 text-app-text-dim" />
+            <div>
+              <p className="text-[11px] text-app-text-secondary font-medium">AI not set up</p>
+              <p className="text-[10px] text-app-text-muted mt-0.5">Add an API key to start analysing laps</p>
+            </div>
+            <button
+              onClick={() => openSettings("ai")}
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-medium transition-colors"
+            >
+              Set up AI
+            </button>
+          </div>
+        )}
+
         {/* Loading state */}
         {loading && (
           <div className="flex flex-col items-center py-10 gap-4">
@@ -391,7 +437,7 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
         )}
 
         {/* Empty state — after clear */}
-        {!analysis && !loading && !error && (
+        {aiConfigured && !analysis && !loading && !error && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Sparkles className="size-5 text-amber-400" />
             <p className="text-[11px] text-app-text-muted">No analysis yet</p>
@@ -516,9 +562,10 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
               {/* Setup */}
               {analysis.setup?.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <SectionHeader icon={<Wrench className="size-3" />} title="Setup" />
-                    {!hasTune && <span className="text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-400 border border-amber-400/20">Estimated</span>}
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="text-app-text-secondary"><Wrench className="size-3" /></span>
+                    <h3 className="text-[10px] font-semibold text-app-text uppercase tracking-wider">Setup</h3>
+                    {!hasTune && <span className="text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-400 border border-amber-400/20">Best Guess</span>}
                   </div>
                   {!hasTune && (
                     <p className="text-[9px] text-amber-400/70 mb-1.5 leading-snug">No tune data linked — values are estimated from telemetry. Link a tune for accurate setup suggestions.</p>
@@ -569,7 +616,7 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
         )}
 
         {/* Chat messages continue the conversation */}
-        {analysis && !loading && (
+        {!loading && (analysis || messages.length > 0) && (
           <>
             {messages.length > 0 && (
               <div className="flex justify-end">
@@ -635,13 +682,13 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
       </div>
 
       {/* Chat input — pinned at bottom */}
-      {analysis && !loading && (
+      {!loading && (analysis || messages.length > 0) && (
         <div className="shrink-0 border-t border-app-border p-2 flex gap-1.5">
           <textarea
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
-            placeholder="Ask about this lap..."
+            placeholder="Chat about this lap..."
             disabled={chatLoading}
             rows={1}
             style={{ height: 'auto', maxHeight: '9.375rem' }}
