@@ -71,14 +71,6 @@ function requireGameId(c: { req: { query: (key: string) => string | undefined } 
   return result.data;
 }
 
-function parseGameId(c: { req: { query: (key: string) => string | undefined } }): GameId {
-  const raw = c.req.query("gameId");
-  if (!raw) throw new Error("gameId query parameter is required");
-  const result = GameIdSchema.safeParse(raw);
-  if (!result.success) throw new Error(`Invalid gameId: ${raw}`);
-  return result.data;
-}
-
 /** Resolve the shared track name for a given ordinal + gameId.
  *  Returns the shared outline file name (e.g. "silverstone") or undefined. */
 function getSharedTrackName(ordinal: number, gameId?: string): string | undefined {
@@ -919,7 +911,8 @@ export const trackRoutes = new Hono()
       const sharedName = getSharedTrackName(ordinal, gameId);
 
       // Try extracted boundaries first (game-specific coordinates)
-      const validGameId = parseGameId(c);
+      const { gameId: validGameId } = c.req.valid("query");
+      if (!validGameId) return c.json({ error: "No boundary data available" }, 404);
       const extractedBoundaries = getTrackBoundariesByOrdinal(ordinal, validGameId);
       if (extractedBoundaries) {
         const minLen = Math.min(extractedBoundaries.leftEdge.length, extractedBoundaries.rightEdge.length);
