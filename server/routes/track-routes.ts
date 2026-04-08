@@ -919,7 +919,8 @@ export const trackRoutes = new Hono()
       const sharedName = getSharedTrackName(ordinal, gameId);
 
       // Try extracted boundaries first (game-specific coordinates)
-      const validGameId = parseGameId(c);
+      const { gameId: validGameId } = c.req.valid("query");
+      if (!validGameId) return c.json({ error: "gameId query parameter is required" }, 400);
       const extractedBoundaries = getTrackBoundariesByOrdinal(ordinal, validGameId);
       if (extractedBoundaries) {
         const minLen = Math.min(extractedBoundaries.leftEdge.length, extractedBoundaries.rightEdge.length);
