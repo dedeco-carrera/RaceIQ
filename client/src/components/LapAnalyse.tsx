@@ -6,8 +6,7 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUnits } from "../hooks/useUnits";
 import { useConvertedTelemetry } from "../hooks/useConvertedTelemetry";
-import { useLaps as useLapsQuery, useLapTelemetry, useTrackName, useCarName, useResolveNames, useTrackOutline, useTrackBoundaries, useTrackSectorBoundaries, useTrackSectors } from "../hooks/queries";
-import { useActiveProfileId } from "../hooks/useProfiles";
+import { useLaps as useLapsQuery, useLapTelemetry, useTrackName, useCarName, useResolveNames, useTrackOutline, useTrackBoundaries, useTrackSectorBoundaries, useTrackSectors, useSettings } from "../hooks/queries";
 import { client } from "../lib/rpc";
 import { useGameId } from "../stores/game";
 import { analyzeLap } from "../lib/lap-insights";
@@ -22,7 +21,7 @@ import { AnalyseLapHeader } from "./analyse/AnalyseLapHeader";
 import { AnalyseDataPanel } from "./analyse/AnalyseDataPanel";
 import { AnalyseTopSection } from "./analyse/AnalyseTopSection";
 import { AnalyseAiSidebar } from "./analyse/AnalyseAiSidebar";
-import { buildExportCsv, buildCopyMetricsText } from "../lib/lap-export";
+import { buildExportCsv, parseLapCsv } from "../lib/lap-export";
 
 // Stable empty array to avoid re-renders when no telemetry loaded
 const emptyTelemetry: TelemetryPacket[] = [];
@@ -34,8 +33,8 @@ export function LapAnalyse() {
   const navigate = useNavigate();
   const units = useUnits();
   const gameId = useGameId();
-  const { data: activeProfileId } = useActiveProfileId();
   const queryClient = useQueryClient();
+  const { displaySettings } = useSettings();
 
   const [laps, setLaps] = useState<LapMeta[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<number | null>(search.track ?? null);
@@ -44,7 +43,8 @@ export function LapAnalyse() {
 
   // Fetch lap telemetry via TanStack Query
   const { data: lapData, isLoading: lapLoading } = useLapTelemetry(selectedLapId);
-  const telemetry = lapData?.telemetry ?? emptyTelemetry;
+  const [importedTelemetry, setImportedTelemetry] = useState<TelemetryPacket[] | null>(null);
+  const telemetry = importedTelemetry ?? lapData?.telemetry ?? emptyTelemetry;
   const displayTelemetry = useConvertedTelemetry(telemetry);
 
   // Fetch track data via TanStack Query (keyed on trackOrdinal derived from selection or lap data)
@@ -101,7 +101,7 @@ export function LapAnalyse() {
   const [rightColWidth, setRightColWidth] = useCookieState("analyse-rightCol", 650);
   const [playing, setPlaying] = useState(false);
   const [rotateWithCar, setRotateWithCar] = useLocalStorage("analyse-rotateWithCar", false);
-  const [showInputs, setShowInputs] = useLocalStorage("analyse-showInputs", false);
+  const [trackOverlay, setTrackOverlay] = useLocalStorage<"none" | "inputs" | "segments" | "sectors">("analyse-trackOverlay", "none");
   const [mapZoom, setMapZoom] = useLocalStorage("analyse-mapZoom", 1);
   const [topHeight, setTopHeight] = useCookieState("analyse-topHeight", 500);
   const loading = lapLoading;
@@ -137,6 +137,7 @@ export function LapAnalyse() {
   const thumbRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const chartsPanelRef = useRef<ChartsPanelHandle>(null);
+  const triggerImportRef = useRef<(() => void) | undefined>(undefined);
 
 
   // Name caches for track/car ordinals
@@ -144,7 +145,7 @@ export function LapAnalyse() {
   const [carNames, setCarNames] = useState<Record<number, string>>({});
 
   // Fetch lap list
-  const { data: allLaps = [] } = useLapsQuery(activeProfileId);
+  const { data: allLaps = [] } = useLapsQuery();
   const fetchedLaps = useMemo(() => allLaps.filter((l) => l.lapTime > 0), [allLaps]);
   // Merge fetched laps with local optimistic updates
   useEffect(() => { setLaps(fetchedLaps); }, [fetchedLaps]);
@@ -240,6 +241,7 @@ export function LapAnalyse() {
       setCursorIdx(0);
       cursorRef.current = 0;
     }
+    setImportedTelemetry(null);
     setCarName(selectedCar != null ? (carNames[selectedCar] ?? "") : "");
     setTrackName(selectedTrack != null ? (trackNames[selectedTrack] ?? "") : "");
   }, [selectedLapId]);
@@ -380,32 +382,33 @@ export function LapAnalyse() {
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["laps", activeProfileId ?? null] });
+      queryClient.invalidateQueries({ queryKey: ["laps"] });
     },
   });
+
+  const deleteLapMutation = useMutation({
+    mutationFn: (lapId: number) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      client.api.laps[":id"].$delete({ param: { id: String(lapId) } }).then((r) => r.json() as any),
+    onSuccess: () => {
+      setSelectedLapId(null);
+      queryClient.invalidateQueries({ queryKey: ["laps"] });
+    },
+  });
+
+  const handleDeleteLap = useCallback(() => {
+    if (!selectedLapId) return;
+    const lap = filteredLaps.find((l) => l.id === selectedLapId);
+    const label = lap ? `Lap ${lap.lapNumber}` : `Lap ${selectedLapId}`;
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    deleteLapMutation.mutate(selectedLapId);
+  }, [selectedLapId, filteredLaps, deleteLapMutation]);
 
   // Export handler
   const handleExport = useCallback(() => {
     if (telemetry.length === 0) return;
-    buildExportCsv(telemetry, carName, trackName, selectedLap, selectedLapId);
+    buildExportCsv(telemetry, carName, trackName, selectedLap, selectedLapId, displaySettings.driverName);
   }, [telemetry, selectedLapId, selectedLap, carName, trackName]);
-
-  const handleCopyMetrics = useCallback(() => {
-    if (!currentPacket) return;
-    const text = buildCopyMetricsText({
-      currentPacket,
-      currentDisplayPacket,
-      cursorIdx,
-      telemetry,
-      totalTime,
-      trackName,
-      carName,
-      selectedLap,
-      units,
-      gameId,
-    });
-    navigator.clipboard.writeText(text);
-  }, [currentPacket, currentDisplayPacket, cursorIdx, telemetry, totalTime, trackName, carName, selectedLap, units, gameId]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -432,14 +435,34 @@ export function LapAnalyse() {
         onTuneChange={(tuneId) => updateLapTune.mutate(tuneId)}
         onViewTune={setViewingTuneId}
         onShowSetup={() => setShowSetup(true)}
-        onCopyMetrics={handleCopyMetrics}
         onExport={handleExport}
         onToggleAi={() => setAiPanelOpen((v) => !v)}
+        onDeleteLap={handleDeleteLap}
+        {...(import.meta.env.DEV && {
+          onImport: (csv: string) => {
+            const { telemetry: packets, meta } = parseLapCsv(csv);
+            if (packets.length === 0) return;
+            setImportedTelemetry(packets);
+            if (meta.carName) setCarName(meta.carName);
+            if (meta.trackName) setTrackName(meta.trackName);
+            if (meta.carOrdinal != null) setSelectedCar(meta.carOrdinal);
+            if (meta.trackOrdinal != null) setSelectedTrack(meta.trackOrdinal);
+          },
+          triggerImportRef,
+        })}
       />
 
       {telemetry.length === 0 && (
-        <div className="flex-1 flex items-center justify-center text-app-text-muted text-sm">
-          {loading ? "Loading lap telemetry..." : selectedLapId ? "No telemetry data for this lap." : "Select a track, car, and lap to analyse."}
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-app-text-muted text-sm">
+          <span>{loading ? "Loading lap telemetry..." : selectedLapId ? "No telemetry data for this lap." : "Select a track, car, and lap to analyse."}</span>
+          {import.meta.env.DEV && !loading && (
+            <button
+              className="text-xs text-app-text-muted/40 underline underline-offset-2 hover:text-app-text-muted/70"
+              onClick={() => triggerImportRef.current?.()}
+            >
+              [dev] import exported CSV
+            </button>
+          )}
         </div>
       )}
 
@@ -468,10 +491,10 @@ export function LapAnalyse() {
             aiPanelOpen={aiPanelOpen}
             aiHighlights={aiHighlights}
             rotateWithCar={rotateWithCar}
-            showInputs={showInputs}
+            trackOverlay={trackOverlay}
             mapZoom={mapZoom}
             onRotateWithCarToggle={() => setRotateWithCar((r) => !r)}
-            onShowInputsToggle={() => setShowInputs((v) => !v)}
+            onTrackOverlayCycle={() => setTrackOverlay((v) => v === "none" ? "inputs" : v === "inputs" ? "segments" : v === "segments" ? "sectors" : "none")}
             onMapZoomChange={setMapZoom}
             vizMode={vizMode}
             onVizModeChange={setWheelTab}

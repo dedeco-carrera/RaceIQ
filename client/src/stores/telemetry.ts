@@ -21,6 +21,10 @@ export interface DisplaySettings {
   openaiApiKeySet?: boolean;
   /** Server-injected: whether an Anthropic API key is stored */
   anthropicApiKeySet?: boolean;
+  /** Driver display name */
+  driverName?: string;
+  /** Whether the user has completed onboarding */
+  onboardingComplete?: boolean;
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {

@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { formatLapTime } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { useBulkDeleteLaps, useDeleteLap } from "@/hooks/queries";
-import { useActiveProfileId } from "@/hooks/useProfiles";
 import { useGameId } from "@/stores/game";
 import { client } from "@/lib/rpc";
 import { drawTrack } from "@/lib/canvas/draw-track";
@@ -13,6 +12,7 @@ import { F125SetupsWithGuide } from "@/components/f1/F125TrackSetups";
 import { F125Leaderboard } from "@/components/f1/F125Leaderboard";
 import { AccTrackSetups, AccTrackGuide } from "@/components/acc/AccTrackSetups";
 import { TrackTunes } from "./TrackTunes";
+import { Button } from "@/components/ui/button";
 import { TrackDebugPanel } from "./debug/TrackDebugPanel";
 import type { TrackInfo, Point, TrackSegment, TrackSectors } from "./types";
 
@@ -34,13 +34,11 @@ interface TrackLap {
 export function TrackDetail({ track, onBack, initialTab, navigate }: { track: TrackInfo; onBack: () => void; initialTab?: string; navigate: ReturnType<typeof useNavigate> }) {
   const gameId = useGameId();
   const gid = gameId ?? undefined;
-  const { data: activeProfileId } = useActiveProfileId();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [outline, setOutline] = useState<Point[] | null>(null);
   const [sectors, setSectors] = useState<TrackSectors | null>(null);
   const [segSource, setSegSource] = useState<string>(""); // "user" | "extracted" | "named" | "shared" | "auto"
-  const [extractedSectors, setExtractedSectors] = useState<TrackSectors | null>(null);
-  const [showExtracted, setShowExtracted] = useState(false);
+
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, z: 0 });
   const zoomRef = useRef(1);
@@ -106,22 +104,19 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
       client.api["track-outline"][":ordinal"].$get({ param: { ordinal: String(track.ordinal) }, query: { gameId: gid ?? undefined } }).then((r) => r.json() as unknown as { points?: Point[] } | Point[]),
       client.api["track-sectors"][":ordinal"].$get({ param: { ordinal: String(track.ordinal) }, query: { gameId: gid! } }).then((r) => r.json() as unknown as (TrackSectors & { source?: string }) | null),
       client.api["track-sector-boundaries"][":ordinal"].$get({ param: { ordinal: String(track.ordinal) }, query: { gameId: gid! } }).then((r) => r.json() as unknown as { s1End: number; s2End: number } | null),
-      client.api["track-sectors"][":ordinal"].$get({ param: { ordinal: String(track.ordinal) }, query: { gameId: gid!, source: "extracted" } as never }).then((r) => r.json() as unknown as TrackSectors | null),
-    ]).then(([outlineData, sectorData, boundsData, extractedData]) => {
+    ]).then(([outlineData, sectorData, boundsData]) => {
       if (!Array.isArray(outlineData) && outlineData?.points && Array.isArray(outlineData.points)) setOutline(outlineData.points);
       else if (Array.isArray(outlineData)) setOutline(outlineData);
       else setOutline(null);
       setSectors(sectorData);
       setSegSource((sectorData as (TrackSectors & { source?: string }) | null)?.source ?? "");
-      if (extractedData?.segments?.length) setExtractedSectors(extractedData);
-      else setExtractedSectors(null);
       if (boundsData?.s1End) setSectorBounds(boundsData);
     }).catch(() => {});
   }, [track.ordinal, track.hasOutline, gameId]);
 
   // Fetch all laps for this track
   const fetchTrackLaps = useCallback(() => {
-    client.api.tracks[":trackOrdinal"].leaderboard.$get({ param: { trackOrdinal: String(track.ordinal) }, query: { profileId: activeProfileId != null ? String(activeProfileId) : undefined, gameId: gameId ?? undefined } } as never)
+    client.api.tracks[":trackOrdinal"].leaderboard.$get({ param: { trackOrdinal: String(track.ordinal) }, query: { gameId: gameId ?? undefined } } as never)
       .then((r) => r.json() as unknown as Record<string, TrackLap[]> | null)
       .then((data) => {
         if (!data) { setTrackLaps([]); return; }
@@ -131,14 +126,14 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
         setSelectedCars(new Set(all.map((l) => l.carOrdinal)));
       })
       .catch(() => {});
-  }, [track.ordinal, activeProfileId]);
+  }, [track.ordinal, gameId]);
 
   useEffect(() => { fetchTrackLaps(); }, [fetchTrackLaps]);
 
   // Use edit segments for preview when editing, otherwise use fetched sectors
   const displaySectors = editing && editSegments.length > 0
     ? { segments: editSegments, totalDist: sectors?.totalDist ?? 0 }
-    : showExtracted && extractedSectors ? extractedSectors : sectors;
+    : sectors;
 
   useEffect(() => {
     if (!outline || !canvasRef.current) return;
@@ -262,7 +257,7 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
   const saveSegments = useCallback(async () => {
     setSaving(true);
     try {
-      const res = await client.api.tracks[":trackOrdinal"].segments.$put({ param: { trackOrdinal: String(track.ordinal) }, json: { segments: editSegments } } as never);
+      const res = await client.api.tracks[":trackOrdinal"].segments.$put({ param: { trackOrdinal: String(track.ordinal) }, query: { gameId: gid }, json: { segments: editSegments } } as never);
       if (res.ok) {
         setSectors({ segments: editSegments, totalDist: sectors?.totalDist ?? 0 });
         setEditing(false);
@@ -282,7 +277,7 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
   const saveSectorBounds = useCallback(async () => {
     setSavingSectors(true);
     try {
-      const res = await client.api["track-sector-boundaries"][":ordinal"].$put({ param: { ordinal: String(track.ordinal) }, json: { s1End: editS1 / 100, s2End: editS2 / 100 } } as never);
+      const res = await client.api["track-sector-boundaries"][":ordinal"].$put({ param: { ordinal: String(track.ordinal) }, query: { gameId: gid }, json: { s1End: editS1 / 100, s2End: editS2 / 100 } } as never);
       if (res.ok) {
         setSectorBounds({ s1End: editS1 / 100, s2End: editS2 / 100 });
         setEditingSectors(false);
@@ -469,19 +464,6 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
               {(sectorBounds || displaySectors) && (
                 <>
                   <div className="h-px" />
-                  {extractedSectors && segSource !== "extracted" && (
-                    <button
-                      onClick={() => setShowExtracted((v) => !v)}
-                      className={`px-1.5 py-1 text-[9px] font-mono rounded border transition-colors ${
-                        showExtracted
-                          ? "bg-emerald-900/50 border-emerald-700 text-emerald-400"
-                          : "bg-app-surface-alt/80 border-app-border-input text-app-text-secondary hover:text-app-text"
-                      }`}
-                      title={showExtracted ? "Show active segments" : "Show game-extracted segments"}
-                    >
-                      {showExtracted ? "Game" : "Active"}
-                    </button>
-                  )}
                   <button
                     onClick={() => setMapDisplayMode((m) => m === "segments" ? "sectors" : "segments")}
                     className={`px-1.5 py-1 text-[9px] font-mono rounded border transition-colors ${
@@ -607,12 +589,14 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
                                 </td>
                                 <td className="px-2 py-1.5 text-right">
                                   <div className="flex items-center justify-end gap-1">
-                                    <button
+                                    <Button
+                                      variant="app-outline"
+                                      size="app-sm"
+                                      className="bg-cyan-900/50 !border-cyan-700 text-app-accent hover:bg-cyan-900/70"
                                       onClick={() => navTo({ to: "/fm23/analyse", search: { track: track.ordinal, car: lap.carOrdinal, lap: lap.lapId } })}
-                                      className="text-app-unit px-1.5 py-0.5 rounded text-cyan-400 hover:text-cyan-300 bg-cyan-900/20 hover:bg-cyan-900/40"
                                     >
                                       Analyse
-                                    </button>
+                                    </Button>
                                     {confirmSingleDelete === lap.lapId ? (
                                       <>
                                         <button onClick={() => { handleSingleDelete(lap.lapId); setConfirmSingleDelete(null); }} className="text-app-unit px-1.5 py-0.5 rounded text-white bg-red-600 hover:bg-red-500">Confirm</button>
@@ -708,14 +692,14 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <span className="text-app-label text-app-text-muted uppercase tracking-wider">Segments</span>
-                  {(showExtracted || segSource) && (
+                  {segSource && (
                     <span className="text-[9px] font-mono text-app-text-dim px-1 py-0.5 rounded bg-app-surface-alt border border-app-border-input">
-                      {showExtracted ? "game" : segSource}
+                      {segSource}
                     </span>
                   )}
                 </div>
                 {isDevelopment && (!editing ? (
-                  <button onClick={startEditing} disabled={showExtracted} className="text-app-unit text-cyan-400 hover:text-cyan-300 px-2 py-0.5 rounded bg-cyan-900/30 border border-cyan-800/50 disabled:opacity-30">Edit</button>
+                  <button onClick={startEditing} className="text-app-unit text-cyan-400 hover:text-cyan-300 px-2 py-0.5 rounded bg-cyan-900/30 border border-cyan-800/50">Edit</button>
                 ) : (
                   <div className="flex gap-1">
                     <button onClick={saveSegments} disabled={saving} className="text-app-unit text-emerald-400 hover:text-emerald-300 px-2 py-0.5 rounded bg-emerald-900/30 border border-emerald-800/50 disabled:opacity-50">{saving ? "..." : "Save"}</button>
@@ -736,7 +720,10 @@ export function TrackDetail({ track, onBack, initialTab, navigate }: { track: Tr
                           <span className={`text-app-label font-mono font-bold ${color}`}>{segDisplayNames[i]}</span>
                           <span className="text-app-label text-app-text-muted capitalize">{seg.type}</span>
                         </div>
-                        <span className="text-app-label font-mono text-app-text-secondary">{pct}%</span>
+                        <div className="flex items-center gap-2">
+                          {track.lengthKm > 0 && <span className="text-app-label font-mono text-app-text-dim">{((seg.endFrac - seg.startFrac) * track.lengthKm).toFixed(2)} km</span>}
+                          <span className="text-app-label font-mono text-app-text-secondary">{pct}%</span>
+                        </div>
                       </div>
                     );
                   }

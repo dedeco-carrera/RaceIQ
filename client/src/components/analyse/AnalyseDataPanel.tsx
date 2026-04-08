@@ -1,8 +1,10 @@
+import { useState, useCallback } from "react";
+import { Copy, Check } from "lucide-react";
 import type { TelemetryPacket, GameId } from "@shared/types";
 import type { DisplayPacket } from "../../lib/convert-packet";
 import type { LapInsight } from "../../lib/lap-insights";
 import type { useUnits } from "../../hooks/useUnits";
-import { Info } from "lucide-react";
+import { getSteeringLock } from "../Settings";
 import { MetricsPanel } from "./AnalyseMetricsPanel";
 import { AnalyseDynamicsPanel } from "./AnalyseDynamicsPanel";
 import { AnalyseF1ErsPanel } from "./AnalyseF1ErsPanel";
@@ -36,6 +38,59 @@ export function AnalyseDataPanel({
   gameId, units, wearRate,
   lapInsights, onJumpToFrame,
 }: Props) {
+  const [copied, setCopied] = useState(false);
+  const handleCopyValues = useCallback(() => {
+    if (!currentPacket) return;
+    const pkt = currentPacket;
+    const dp = currentDisplayPacket;
+    const speed = dp?.DisplaySpeed ?? pkt.Speed;
+    const throttlePct = ((pkt.Accel / 255) * 100).toFixed(0);
+    const brakePct = ((pkt.Brake / 255) * 100).toFixed(0);
+    const lock = getSteeringLock();
+    const steerDeg = (pkt.Steer / 127) * (lock / 2);
+
+    const lines: string[] = [
+      `Speed: ${speed.toFixed(0)} ${units.speedLabel}`,
+      `RPM: ${pkt.CurrentEngineRpm.toFixed(0)}`,
+      `Gear: ${pkt.Gear}`,
+      `Throttle: ${throttlePct}%`,
+      `Brake: ${brakePct}%`,
+      `Steer: ${steerDeg > 0 ? "+" : ""}${steerDeg.toFixed(0)}°`,
+    ];
+    if (gameId === "fm-2023" || pkt.Boost > 0) lines.push(`Boost: ${pkt.Boost.toFixed(1)} psi`);
+    if (gameId === "fm-2023" || pkt.Power > 0) lines.push(`Power: ${(pkt.Power / 745.7).toFixed(0)} hp`);
+    if (gameId === "fm-2023" || pkt.Torque > 0) lines.push(`Torque: ${pkt.Torque.toFixed(0)} Nm`);
+    lines.push(`Fuel: ${(pkt.Fuel * 100).toFixed(1)}%`);
+
+    // Dynamics
+    lines.push("", "--- Dynamics ---");
+    lines.push(`G-Force Lat: ${pkt.AccelerationX.toFixed(2)}g`);
+    lines.push(`G-Force Lon: ${pkt.AccelerationZ.toFixed(2)}g`);
+
+    // Tire temps
+    const tFL = dp?.DisplayTireTempFL ?? pkt.TireTempFL;
+    const tFR = dp?.DisplayTireTempFR ?? pkt.TireTempFR;
+    const tRL = dp?.DisplayTireTempRL ?? pkt.TireTempRL;
+    const tRR = dp?.DisplayTireTempRR ?? pkt.TireTempRR;
+    lines.push("", "--- Tire Temps ---");
+    lines.push(`FL: ${tFL.toFixed(0)}  FR: ${tFR.toFixed(0)}`);
+    lines.push(`RL: ${tRL.toFixed(0)}  RR: ${tRR.toFixed(0)}`);
+
+    // Tire wear
+    lines.push("", "--- Tire Wear ---");
+    lines.push(`FL: ${((1 - pkt.TireWearFL) * 100).toFixed(1)}%  FR: ${((1 - pkt.TireWearFR) * 100).toFixed(1)}%`);
+    lines.push(`RL: ${((1 - pkt.TireWearRL) * 100).toFixed(1)}%  RR: ${((1 - pkt.TireWearRR) * 100).toFixed(1)}%`);
+
+    // Suspension
+    lines.push("", "--- Suspension Travel ---");
+    lines.push(`FL: ${(pkt.NormSuspensionTravelFL * 100).toFixed(0)}%  FR: ${(pkt.NormSuspensionTravelFR * 100).toFixed(0)}%`);
+    lines.push(`RL: ${(pkt.NormSuspensionTravelRL * 100).toFixed(0)}%  RR: ${(pkt.NormSuspensionTravelRR * 100).toFixed(0)}%`);
+
+    navigator.clipboard.writeText(lines.join("\n"));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [currentPacket, currentDisplayPacket, gameId, units]);
+
   return (
     <div className="w-[22rem] h-full shrink-0 border-l border-app-border bg-app-surface/50 flex flex-col overflow-hidden">
       {/* Tab switcher */}
@@ -68,10 +123,19 @@ export function AnalyseDataPanel({
       </div>
 
       {sidebarTab === "live" && (
-        <div className="px-3 pt-3 pb-1 shrink-0">
+        <div className="px-3 pt-3 pb-1 shrink-0 flex items-center justify-between">
           <h3 className="text-[10px] text-app-text-muted uppercase tracking-wider mb-0 font-semibold">
             Metrics at Cursor
           </h3>
+          {currentPacket && (
+            <button
+              onClick={handleCopyValues}
+              title="Copy values at cursor"
+              className="text-app-text-muted hover:text-app-text transition-colors"
+            >
+              {copied ? <Check className="size-3.5 text-green-400" /> : <Copy className="size-3.5" />}
+            </button>
+          )}
         </div>
       )}
 
@@ -82,12 +146,8 @@ export function AnalyseDataPanel({
 
             {currentPacket && (
               <>
-                <div className="flex items-center gap-1 mb-2 mt-3 pt-2 border-t border-app-border group relative">
+                <div className="mb-2 mt-3 pt-2 border-t border-app-border">
                   <h3 className="text-[10px] text-app-text-muted uppercase tracking-wider font-semibold">Dynamics</h3>
-                  <Info className="w-3.5 h-3.5 text-app-text-dim cursor-help" />
-                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block bg-app-surface-alt border border-app-border-input rounded px-2 py-1 text-[10px] text-app-text-secondary whitespace-nowrap z-10 pointer-events-none">
-                    Grip Ask: % of grip capacity per tire<br />100% = at limit, &gt;100% = exceeding grip
-                  </div>
                 </div>
                 <AnalyseDynamicsPanel
                   currentPacket={currentPacket}

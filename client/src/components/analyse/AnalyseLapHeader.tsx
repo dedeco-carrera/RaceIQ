@@ -1,7 +1,10 @@
+import { useState, useRef, useEffect } from "react";
 import type { LapMeta } from "@shared/types";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Trash2 } from "lucide-react";
 import { SearchSelect } from "../ui/SearchSelect";
+import { Button } from "../ui/button";
 import { formatLapTime } from "../../lib/format";
+import { DataGuideModal } from "./DataGuideModal";
 
 interface Props {
   // Selection state
@@ -29,9 +32,11 @@ interface Props {
   onTuneChange: (tuneId: number | null) => void;
   onViewTune: (tuneId: number) => void;
   onShowSetup: () => void;
-  onCopyMetrics: () => void;
   onExport: () => void;
   onToggleAi: () => void;
+  onDeleteLap: () => void;
+  onImport?: (csv: string) => void;
+  triggerImportRef?: React.MutableRefObject<(() => void) | undefined>;
 }
 
 export function AnalyseLapHeader({
@@ -40,9 +45,15 @@ export function AnalyseLapHeader({
   hasTelemetry, hasF1Setup, availableTunes, tunePending,
   loading, aiPanelOpen,
   onTrackChange, onCarChange, onLapChange, onTuneChange, onViewTune, onShowSetup,
-  onCopyMetrics, onExport, onToggleAi,
+  onExport, onToggleAi, onDeleteLap, onImport, triggerImportRef,
 }: Props) {
+  const [guideOpen, setGuideOpen] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (triggerImportRef) triggerImportRef.current = () => importInputRef.current?.click();
+  }, [triggerImportRef]);
   return (
+    <>
     <div className="flex items-center gap-2 p-3 border-b border-app-border flex-wrap shrink-0">
       {/* Track selector */}
       <SearchSelect
@@ -103,56 +114,70 @@ export function AnalyseLapHeader({
             ))}
           </select>
           {selectedLap?.tuneId && (
-            <button
-              onClick={() => onViewTune(selectedLap.tuneId!)}
-              className="px-2 py-1 text-xs bg-app-surface-alt border border-app-border-input rounded text-app-text-muted hover:text-app-text transition-colors"
-            >
+            <Button variant="app-outline" size="app-sm" onClick={() => onViewTune(selectedLap.tuneId!)}>
               View
-            </button>
+            </Button>
           )}
           {tunePending && (
             <span className="text-xs text-app-text-muted animate-pulse">Saving...</span>
           )}
           {hasF1Setup && (
-            <button
-              onClick={onShowSetup}
-              className="px-2 py-1 text-xs bg-app-surface-alt border border-app-border-input rounded text-app-text-muted hover:text-app-text transition-colors"
-            >
+            <Button variant="app-outline" size="app-sm" onClick={onShowSetup}>
               Car Setup
-            </button>
+            </Button>
           )}
         </div>
       )}
 
+      {import.meta.env.DEV && onImport && (
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            file.text().then((csv) => { onImport(csv); e.target.value = ""; });
+          }}
+        />
+      )}
+
       <div className="ml-auto flex items-center gap-2">
-        {hasTelemetry && (
-          <button
-            onClick={onCopyMetrics}
-            className="text-xs text-app-text-secondary hover:text-app-text border border-app-border-input rounded px-3 py-1.5 transition-colors"
-          >
-            Copy
-          </button>
+        {import.meta.env.DEV && onImport && (
+          <Button variant="app-outline" size="app-md" onClick={() => importInputRef.current?.click()} title="Dev only: import exported CSV to override telemetry" className="text-app-text-muted/60 border-dashed">
+            [dev] Import CSV
+          </Button>
+        )}
+        {selectedLapId != null && (
+          <Button variant="app-outline" size="app-md" onClick={onDeleteLap} className="text-red-400 border-red-400/30 hover:bg-red-400/10">
+            <Trash2 className="size-3.5" />
+            Delete
+          </Button>
         )}
         {hasTelemetry && (
-          <button
-            onClick={onExport}
-            className="text-xs text-app-text-secondary hover:text-app-text border border-app-border-input rounded px-3 py-1.5 transition-colors"
-          >
+          <Button variant="app-outline" size="app-md" onClick={() => setGuideOpen(true)}>
+            Guide
+          </Button>
+        )}
+{hasTelemetry && (
+          <Button variant="app-outline" size="app-md" onClick={onExport}>
             Export CSV
-          </button>
+          </Button>
         )}
         {hasTelemetry && (
-          <button
+          <Button
+            variant="app-outline"
+            size="app-lg"
             onClick={onToggleAi}
-            className={`flex items-center gap-1.5 text-xs border rounded px-3 py-1.5 transition-colors ${
-              aiPanelOpen
-                ? "text-amber-400 border-amber-400/40 bg-amber-400/10"
-                : "text-app-text-secondary hover:text-amber-400 border-app-border-input"
-            }`}
+            className={aiPanelOpen
+              ? "text-amber-400 border-amber-400/40 bg-amber-400/10"
+              : "hover:text-amber-400"
+            }
           >
-            <Sparkles className="size-3" />
-            AI
-          </button>
+            <Sparkles className="size-3.5" />
+            AI Analysis
+          </Button>
         )}
         {loading && (
           <span className="text-xs text-app-text-muted animate-pulse">
@@ -161,5 +186,7 @@ export function AnalyseLapHeader({
         )}
       </div>
     </div>
+    {guideOpen && <DataGuideModal onClose={() => setGuideOpen(false)} />}
+    </>
   );
 }

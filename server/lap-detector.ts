@@ -13,8 +13,8 @@
 import type { TelemetryPacket, GameId } from "../shared/types";
 import { insertSession, insertLap } from "./db/queries";
 import { extractCurbSegments, recordCurbData } from "../shared/track-data";
-import { loadSettings } from "./settings";
 import { getTuneAssignment } from "./db/tune-queries";
+import { assessLapRecording } from "./lap-quality";
 
 const SESSION_TIMEOUT_MS = 5 * 60_000; // 5 minutes of silence = new session
 
@@ -342,27 +342,31 @@ class LapDetector {
     }
 
     {
-      const { activeProfileId } = loadSettings();
       const tuneAssignment = await getTuneAssignment(
         this.currentSession.carOrdinal,
         this.currentSession.trackOrdinal
       );
       const tuneId = tuneAssignment?.tuneId ?? null;
       const lapNum = this.currentLapNumber;
-      const valid = this.lapIsValid;
       const packetCount = this.lapBuffer.length;
+
+      // Run recording quality check — can override game-valid laps if telemetry is bad
+      const quality = assessLapRecording(this.lapBuffer, lapTime);
+      const valid = this.lapIsValid && quality.valid;
+      const invalidReason = this.invalidReason ?? (!quality.valid ? quality.reason : null);
+
       insertLap(
         this.currentSession.sessionId,
         lapNum,
         lapTime,
         valid,
         this.lapBuffer,
-        activeProfileId,
+        null,
         tuneId,
-        this.invalidReason
+        invalidReason
       ).then((lapId) => {
         console.log(
-          `[Lap] Saved lap ${lapNum} | Time: ${formatLapTime(lapTime)} | Valid: ${valid} | Packets: ${packetCount} | DB ID: ${lapId}`
+          `[Lap] Saved lap ${lapNum} | Time: ${formatLapTime(lapTime)} | Valid: ${valid}${invalidReason ? ` (${invalidReason})` : ""} | Packets: ${packetCount} | DB ID: ${lapId}`
         );
       }).catch((err) => {
         console.error(`[Lap] Failed to save lap ${lapNum}:`, err);
@@ -393,7 +397,6 @@ class LapDetector {
       const lastPacket = this.lapBuffer[this.lapBuffer.length - 1];
       const lapTime = lastPacket.CurrentLap;
       if (lapTime >= 10) {
-          const { activeProfileId } = loadSettings();
           const tuneAssignment = await getTuneAssignment(
             this.currentSession.carOrdinal,
             this.currentSession.trackOrdinal
@@ -404,7 +407,7 @@ class LapDetector {
             lapTime,
             false,
             this.lapBuffer,
-            activeProfileId,
+            null,
             tuneAssignment?.tuneId ?? null,
             "incomplete"
           ).then(() => {
@@ -443,7 +446,6 @@ class LapDetector {
     const isComplete = lastPacket.LastLap > 0 && lastPacket.LastLap !== this.lastLastLap;
 
     {
-      const { activeProfileId } = loadSettings();
       const tuneAssignment = await getTuneAssignment(
         this.currentSession.carOrdinal,
         this.currentSession.trackOrdinal
@@ -456,7 +458,7 @@ class LapDetector {
         lapTime,
         isComplete && this.lapIsValid,
         this.lapBuffer,
-        activeProfileId,
+        null,
         tuneAssignment?.tuneId ?? null,
         isComplete ? this.invalidReason : "incomplete"
       ).then((lapId) => {

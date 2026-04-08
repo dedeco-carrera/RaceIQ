@@ -253,10 +253,11 @@ export const trackRoutes = new Hono()
       const gameId = c.req.query("gameId");
       const sharedName = getSharedTrackName(ordinal, gameId);
 
-      // Priority: DB -> shared track meta -> bundled code -> default
+      // Priority: DB -> game-specific meta -> shared meta -> bundled code -> default
       const dbSectors = gameId ? await getTrackOutlineSectors(ordinal, requireGameId(c)) : null;
       const sharedMeta = sharedName ? loadSharedTrackMeta(sharedName) : null;
-      const sectors = dbSectors ?? sharedMeta?.sectors ?? getTrackSectorsByOrdinal(ordinal);
+      const gameSectors = gameId ? (sharedMeta as any)?.games?.[gameId]?.sectors : null;
+      const sectors = dbSectors ?? gameSectors ?? sharedMeta?.sectors ?? getTrackSectorsByOrdinal(ordinal);
 
       // Compute track length from outline
       let trackLength = 0;
@@ -291,8 +292,28 @@ export const trackRoutes = new Hono()
         return c.json({ error: "Invalid sector boundaries: need 0 < s1End < s2End < 1" }, 400);
       }
 
-      const updated = await updateTrackOutlineSectors(ordinal, { s1End, s2End }, requireGameId(c));
-      if (!updated) return c.json({ error: "No outline found for track" }, 404);
+      const gameId = c.req.query("gameId");
+      const sharedName = getSharedTrackName(ordinal, gameId);
+
+      // Save to meta file (game-specific if gameId provided)
+      if (sharedName) {
+        const meta = loadSharedTrackMeta(sharedName) ?? { name: sharedName };
+        if (gameId) {
+          (meta as any).games = (meta as any).games ?? {};
+          (meta as any).games[gameId] = (meta as any).games[gameId] ?? {};
+          (meta as any).games[gameId].sectors = { s1End, s2End };
+        } else {
+          (meta as any).sectors = { s1End, s2End };
+        }
+        const metaDir = resolve(SHARED_DIR, "tracks", "meta");
+        if (!existsSync(metaDir)) mkdirSync(metaDir, { recursive: true });
+        writeFileSync(resolve(metaDir, `${sharedName}.json`), JSON.stringify(meta, null, 2));
+      }
+
+      // Also attempt DB save (best-effort, may fail if no outline recorded)
+      if (gameId) {
+        await updateTrackOutlineSectors(ordinal, { s1End, s2End }, gameId as GameId).catch(() => null);
+      }
 
       return c.json({ success: true, s1End, s2End });
     }
@@ -391,13 +412,19 @@ export const trackRoutes = new Hono()
         return c.json({ error: "No shared track name for this ordinal" }, 400);
       }
 
-      // Update shared meta file with segments
+      // Update shared meta file — game-specific if gameId provided, else top-level fallback
       const meta = loadSharedTrackMeta(sharedName) ?? { name: sharedName };
-      (meta as any).segments = body.segments;
+      if (gameId) {
+        (meta as any).games = (meta as any).games ?? {};
+        (meta as any).games[gameId] = (meta as any).games[gameId] ?? {};
+        (meta as any).games[gameId].segments = body.segments;
+      } else {
+        (meta as any).segments = body.segments;
+      }
       const metaDir = resolve(SHARED_DIR, "tracks", "meta");
       if (!existsSync(metaDir)) mkdirSync(metaDir, { recursive: true });
       writeFileSync(resolve(metaDir, `${sharedName}.json`), JSON.stringify(meta, null, 2));
-      console.log(`[Track] Saved segments for ${sharedName} (${body.segments.length} segments)`);
+      console.log(`[Track] Saved segments for ${sharedName}${gameId ? ` (${gameId})` : ""} (${body.segments.length} segments)`);
 
       return c.json({ success: true, count: body.segments.length });
     }
@@ -413,11 +440,14 @@ export const trackRoutes = new Hono()
       const gameId = c.req.query("gameId");
       const sharedName = getSharedTrackName(ordinal, gameId);
 
-      // 1. Shared track meta segments (curated, cross-game)
+      // 1. Shared track meta segments — game-specific only (no cross-game fallback)
       const sharedMeta = sharedName ? loadSharedTrackMeta(sharedName) : null;
-      if (sharedMeta?.segments && sharedMeta.segments.length > 0) {
+      const metaSegments = gameId
+        ? (sharedMeta as any)?.games?.[gameId]?.segments ?? null
+        : sharedMeta?.segments ?? null;
+      if (metaSegments && metaSegments.length > 0) {
         return c.json({
-          segments: sharedMeta.segments.map((s) => ({
+          segments: metaSegments.map((s: any) => ({
             ...s,
             startIdx: 0,
             endIdx: 0,
@@ -597,7 +627,7 @@ export const trackRoutes = new Hono()
 
       // Multi-lap mode — average best laps
       const outlineGameId = c.req.query("gameId") as GameId | undefined;
-      const allLaps = (await getLaps(undefined, outlineGameId)).filter(
+      const allLaps = (await getLaps(outlineGameId)).filter(
         (l) => l.trackOrdinal === trackOrdinal && l.lapTime > 0
       );
       if (allLaps.length === 0) {
@@ -674,25 +704,21 @@ export const trackRoutes = new Hono()
     async (c) => {
       const { trackOrdinal } = c.req.valid("param");
 
-      const profileIdParam = c.req.query("profileId");
-      const profileIdParsed = profileIdParam ? parseInt(profileIdParam, 10) : undefined;
-      const profileId = profileIdParsed !== undefined && !isNaN(profileIdParsed) ? profileIdParsed : undefined;
-
       const gameId = c.req.query("gameId") as GameId | undefined;
-      const trackLaps = (await getLaps(profileId, gameId)).filter(
+      const trackLaps = (await getLaps(gameId)).filter(
         (l) => l.trackOrdinal === trackOrdinal && l.lapTime > 0
       );
 
       // Derive class letter from PI value
       const piClass = (pi: number): string => {
         if (pi >= 999) return "X";
-        if (pi >= 900) return "P";
-        if (pi >= 700) return "R";
-        if (pi >= 600) return "S";
-        if (pi >= 500) return "A";
-        if (pi >= 400) return "B";
-        if (pi >= 300) return "C";
-        if (pi >= 200) return "D";
+        if (pi >= 901) return "P";
+        if (pi >= 801) return "R";
+        if (pi >= 701) return "S";
+        if (pi >= 601) return "A";
+        if (pi >= 501) return "B";
+        if (pi >= 401) return "C";
+        if (pi >= 301) return "D";
         return "E";
       };
 
@@ -776,14 +802,15 @@ export const trackRoutes = new Hono()
     async (c) => {
       const { ordinal } = c.req.valid("param");
 
-      // Get sector boundaries
       const gameId = c.req.query("gameId") as GameId | undefined;
+      const trackLaps = (await getLaps(gameId)).filter((l) => l.trackOrdinal === ordinal && l.lapTime > 0);
+      if (trackLaps.length === 0) return c.json({});
+
+      // Get sector boundaries; fall back to equal thirds if none defined
       const dbSectors = gameId ? await getTrackOutlineSectors(ordinal, gameId) : null;
       const bundled = getTrackSectorsByOrdinal(ordinal);
-      const sectors = dbSectors ?? bundled;
-      if (!sectors?.s1End || !sectors?.s2End) return c.json({});
-      const trackLaps = (await getLaps(undefined, gameId)).filter((l) => l.trackOrdinal === ordinal && l.lapTime > 0);
-      if (trackLaps.length === 0) return c.json({});
+      const rawSectors = dbSectors ?? bundled;
+      const sectors = { s1End: rawSectors?.s1End ?? 1 / 3, s2End: rawSectors?.s2End ?? 2 / 3 };
 
       const result: Record<number, { s1: number; s2: number; s3: number }> = {};
 
@@ -792,26 +819,38 @@ export const trackRoutes = new Hono()
         if (!lapData?.telemetry || lapData.telemetry.length < 50) continue;
 
         const packets = lapData.telemetry;
-        const startDist = packets[0].DistanceTraveled;
-        const endDist = packets[packets.length - 1].DistanceTraveled;
-        const totalDist = endDist - startDist;
-        if (totalDist < 100) continue;
 
+        // Prefer game-broadcast sector times (non-zero values in packets)
         let s1Time = 0;
         let s2Time = 0;
-        let currentSector = 0;
-        let sectorStartTime = packets[0].CurrentLap;
-
         for (const p of packets) {
-          const frac = (p.DistanceTraveled - startDist) / totalDist;
-          const expectedSector = frac < sectors.s1End ? 0 : frac < sectors.s2End ? 1 : 2;
+          if ((p.f1?.sector1Time ?? 0) > 0) s1Time = p.f1!.sector1Time;
+          if ((p.f1?.sector2Time ?? 0) > 0) s2Time = p.f1!.sector2Time;
+        }
 
-          if (expectedSector > currentSector) {
-            const sectorTime = p.CurrentLap - sectorStartTime;
-            if (currentSector === 0) s1Time = sectorTime;
-            else if (currentSector === 1) s2Time = sectorTime;
-            sectorStartTime = p.CurrentLap;
-            currentSector = expectedSector;
+        // Fall back to distance-fraction computation when game didn't provide sector times
+        if (s1Time === 0 || s2Time === 0) {
+          const startDist = packets[0].DistanceTraveled;
+          const trackLength = packets[packets.length - 1].DistanceTraveled;
+          if (trackLength < 100) continue;
+          // Skip laps where recording started more than 5% into the lap — fractions would be wrong
+          if (startDist / trackLength > 0.05) continue;
+
+          let currentSector = 0;
+          let sectorStartTime = packets[0].CurrentLap;
+          s1Time = 0;
+          s2Time = 0;
+
+          for (const p of packets) {
+            const frac = p.DistanceTraveled / trackLength;
+            const expectedSector = frac < sectors.s1End ? 0 : frac < sectors.s2End ? 1 : 2;
+            if (expectedSector > currentSector) {
+              const sectorTime = p.CurrentLap - sectorStartTime;
+              if (currentSector === 0) s1Time = sectorTime;
+              else if (currentSector === 1) s2Time = sectorTime;
+              sectorStartTime = p.CurrentLap;
+              currentSector = expectedSector;
+            }
           }
         }
 
@@ -1024,7 +1063,7 @@ export const trackRoutes = new Hono()
 
       // Find all laps for this track
       const curbGameId = c.req.query("gameId") as GameId | undefined;
-      const trackLaps = (await getLaps(undefined, curbGameId)).filter(l => l.trackOrdinal === ordinal && l.lapTime > 0);
+      const trackLaps = (await getLaps(curbGameId)).filter(l => l.trackOrdinal === ordinal && l.lapTime > 0);
       if (trackLaps.length === 0) return c.json({ error: "No laps found for this track" }, 404);
 
       let totalSegments = 0;

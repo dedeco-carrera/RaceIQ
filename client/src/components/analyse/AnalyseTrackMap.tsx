@@ -191,8 +191,29 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       return lo;
     }
 
+
+    // Sector-colored driving line (S1=red, S2=blue, S3=yellow)
+    if (sectors && displayOutline.length > 10 && !showInputs) {
+      const sectorLineColors = ["#ef4444", "#3b82f6", "#eab308"];
+      const boundaries = [0, sectors.s1End, sectors.s2End, 1];
+      for (let si = 0; si < 3; si++) {
+        const startIdx = fracToIdx(boundaries[si]);
+        const endIdx = fracToIdx(boundaries[si + 1]);
+        if (startIdx >= endIdx) continue;
+        ctx.beginPath();
+        ctx.strokeStyle = sectorLineColors[si];
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = "round";
+        const [mx, my] = toCanvas(displayOutline[startIdx].x, displayOutline[startIdx].z);
+        ctx.moveTo(mx, my);
+        for (let i = startIdx + 1; i <= endIdx && i < n; i++) {
+          const [px, py] = toCanvas(displayOutline[i].x, displayOutline[i].z);
+          ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
     // Colored segments (no labels — keeps the map clean; hidden when inputs overlay is active)
-    if (segments && segments.length > 0 && !showInputs) {
+    } else if (segments && segments.length > 0 && !showInputs) {
       for (let si = 0; si < segments.length; si++) {
         const seg = segments[si];
         const startIdx = fracToIdx(seg.startFrac);
@@ -261,8 +282,8 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       const sectorColors = ["#ef4444", "#3b82f6", "#eab308"];
       const sectorFracs = [sectors.s1End, sectors.s2End];
       for (let si = 0; si < sectorFracs.length; si++) {
-        const sIdx = Math.round(sectorFracs[si] * (displayOutline.length - 1));
-        const pt = displayOutline[Math.min(sIdx, displayOutline.length - 1)];
+        const sIdx = fracToIdx(sectorFracs[si]);
+        const pt = displayOutline[sIdx];
         if (!pt) continue;
         const [mx, my] = toCanvas(pt.x, pt.z);
         const prevIdx = Math.max(0, sIdx - 3);
@@ -362,7 +383,7 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telemetry, outline, boundaries, sectors, segments, rotateWithCar, zoom, highlights, showInputs, containerHeight]);
 
-  // Composite the cached offscreen track onto the main canvas, with optional rotation for car-view mode
+  // Composite the cached offscreen track onto the main canvas with rotation for follow view.
   const compositeTrack = useCallback((idx: number) => {
     const canvas = canvasRef.current;
     const offscreen = offscreenRef.current;
@@ -379,32 +400,27 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    if (rotateWithCar) {
-      const pkt = telemetry[idx];
-      if (pkt && (pkt.PositionX !== 0 || pkt.PositionZ !== 0)) {
-        const carCx = t.offsetX + (t.maxX - pkt.PositionX) * t.scale;
-        const carCy = t.offsetZ + (pkt.PositionZ - t.minZ) * t.scale;
-        ctx.translate(t.w / 2, t.h / 2);
-        ctx.rotate(Math.PI - pkt.Yaw);
-        ctx.translate(-carCx, -carCy);
-      }
-    }
-
-    // Draw the cached static track (offscreen may be larger than canvas for follow view)
-    ctx.drawImage(offscreen, 0, 0, t.offW, t.offH);
-
-    // Draw car on main canvas (in rotated space so it stays aligned)
     const pkt = telemetry[idx];
     if (pkt && (pkt.PositionX !== 0 || pkt.PositionZ !== 0)) {
-      const cx = t.offsetX + (t.maxX - pkt.PositionX) * t.scale;
-      const cy = t.offsetZ + (pkt.PositionZ - t.minZ) * t.scale;
-      const fwdX = pkt.PositionX + Math.sin(pkt.Yaw) * 1;
-      const fwdZ = pkt.PositionZ + Math.cos(pkt.Yaw) * 1;
+      const carCx = t.offsetX + (t.maxX - pkt.PositionX) * t.scale;
+      const carCy = t.offsetZ + (pkt.PositionZ - t.minZ) * t.scale;
+      ctx.translate(t.w / 2, t.h / 2);
+      ctx.rotate(Math.PI - pkt.Yaw);
+      ctx.translate(-carCx, -carCy);
+    }
+
+    ctx.drawImage(offscreen, 0, 0, t.offW, t.offH);
+
+    const pkt2 = telemetry[idx];
+    if (pkt2 && (pkt2.PositionX !== 0 || pkt2.PositionZ !== 0)) {
+      const cx = t.offsetX + (t.maxX - pkt2.PositionX) * t.scale;
+      const cy = t.offsetZ + (pkt2.PositionZ - t.minZ) * t.scale;
+      const fwdX = pkt2.PositionX + Math.sin(pkt2.Yaw);
+      const fwdZ = pkt2.PositionZ + Math.cos(pkt2.Yaw);
       const fx = t.offsetX + (t.maxX - fwdX) * t.scale;
       const fy = t.offsetZ + (fwdZ - t.minZ) * t.scale;
       const angle = Math.atan2(fy - cy, fx - cx);
       const triSize = 8;
-
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
@@ -419,11 +435,7 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.restore();
-
-      const px = rotateWithCar ? t.w / 2 : cx;
-      const py = rotateWithCar ? t.h / 2 : cy;
-      const pa = rotateWithCar ? -Math.PI / 2 : angle;
-      carPosRef.current = { x: px, y: py, w: t.w, h: t.h, angle: pa };
+      carPosRef.current = { x: t.w / 2, y: t.h / 2, w: t.w, h: t.h, angle: -Math.PI / 2 };
     }
 
     ctx.restore();
@@ -447,8 +459,17 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
     const pkt = telemetry[idx];
     if (!pkt || (pkt.PositionX === 0 && pkt.PositionZ === 0)) return;
 
+    // The offscreen is blitted to the canvas scaled to fit: drawImage(offscreen, 0, 0, w, h).
+    // When offW > w (e.g. wide tracks where Z dimension is the limiting scale), coordinates
+    // must be scaled to match the displayed track position.
+    const scaleX = t.w / t.offW;
+    const scaleY = t.h / t.offH;
+
     function toCanvas(x: number, z: number): [number, number] {
-      return [t!.offsetX + (t!.maxX - x) * t!.scale, t!.offsetZ + (z - t!.minZ) * t!.scale];
+      return [
+        (t!.offsetX + (t!.maxX - x) * t!.scale) * scaleX,
+        (t!.offsetZ + (z - t!.minZ) * t!.scale) * scaleY,
+      ];
     }
 
     const [cx, cy] = toCanvas(pkt.PositionX, pkt.PositionZ);

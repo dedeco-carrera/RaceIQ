@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Table, TBody, TD, TH, THead, TRow } from "../ui/AppTable";
 
 interface F1Driver {
   name: string;
@@ -328,30 +329,25 @@ export function F1Cars() {
 
   return (
     <div className="flex-1 overflow-auto p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-app-text">
-          F1 2025 Teams & Cars
-        </h1>
-        <div className="flex gap-1 bg-app-surface-alt/30 rounded-lg p-0.5">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center rounded-lg border border-app-border overflow-hidden">
           <button
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              view === "grid"
-                ? "bg-app-surface-alt text-app-text"
-                : "text-app-text-dim hover:text-app-text-secondary"
-            }`}
-            onClick={() => setView("grid")}
+            onClick={() => setView("table")}
+            title="Table view"
+            className={`px-2.5 py-1.5 transition-colors ${view === "table" ? "bg-app-accent/20 text-app-accent" : "bg-app-surface text-app-text/90-muted hover:text-app-text/90"}`}
           >
-            Cards
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>
+            </svg>
           </button>
           <button
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              view === "table"
-                ? "bg-app-surface-alt text-app-text"
-                : "text-app-text-dim hover:text-app-text-secondary"
-            }`}
-            onClick={() => setView("table")}
+            onClick={() => setView("grid")}
+            title="Grid view"
+            className={`px-2.5 py-1.5 transition-colors ${view === "grid" ? "bg-app-accent/20 text-app-accent" : "bg-app-surface text-app-text/90-muted hover:text-app-text/90"}`}
           >
-            Compare
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+            </svg>
           </button>
         </div>
       </div>
@@ -360,16 +356,16 @@ export function F1Cars() {
 
       {/* Regulation Specs */}
       <div>
-        <h2 className="text-sm font-semibold text-app-text-secondary uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-semibold text-app-text/90 uppercase tracking-wider mb-3">
           2025 Technical Regulations
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {Object.entries(regulations).map(([key, value]) => (
             <div key={key} className="bg-app-surface-alt/20 rounded-lg p-3">
-              <div className="text-[10px] text-app-text-dim uppercase tracking-wider mb-1">
+              <div className="text-[10px] text-app-text/90-dim uppercase tracking-wider mb-1">
                 {key.replace(/([A-Z])/g, " $1").trim()}
               </div>
-              <div className="text-xs text-app-text font-medium">{value}</div>
+              <div className="text-xs text-app-text/90 font-medium">{value}</div>
             </div>
           ))}
         </div>
@@ -377,7 +373,7 @@ export function F1Cars() {
 
       {/* Power Unit Groups */}
       <div>
-        <h2 className="text-sm font-semibold text-app-text-secondary uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-semibold text-app-text/90 uppercase tracking-wider mb-3">
           Power Unit Suppliers
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -386,7 +382,7 @@ export function F1Cars() {
               key={pu.name}
               className="bg-app-surface-alt/20 rounded-lg p-3"
             >
-              <div className="text-sm font-semibold text-app-text mb-2">
+              <div className="text-sm font-semibold text-app-text/90 mb-2">
                 {pu.name}
               </div>
               <div className="space-y-1">
@@ -398,7 +394,7 @@ export function F1Cars() {
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: team.color }}
                       />
-                      <span className="text-app-text-secondary">
+                      <span className="text-app-text/90">
                         {team.name}
                       </span>
                     </div>
@@ -433,7 +429,7 @@ function TeamCard({ team }: { team: F1Team }) {
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <div className="text-base font-semibold text-app-text">
+              <div className="text-base font-semibold text-app-text/90">
                 {team.name}
               </div>
               <span
@@ -442,7 +438,7 @@ function TeamCard({ team }: { team: F1Team }) {
                 {team.stats.overallRating}
               </span>
             </div>
-            <div className="text-xs text-app-text-dim">{team.fullName}</div>
+            <div className="text-xs text-app-text/90-dim">{team.fullName}</div>
           </div>
           <div
             className="text-xs font-mono px-2 py-0.5 rounded"
@@ -480,10 +476,10 @@ function TeamCard({ team }: { team: F1Team }) {
                   {driver.number}
                 </span>
                 <div>
-                  <div className="text-sm font-medium text-app-text leading-tight">
+                  <div className="text-sm font-medium text-app-text/90 leading-tight">
                     {driver.name}
                   </div>
-                  <div className="text-[10px] text-app-text-dim uppercase">
+                  <div className="text-[10px] text-app-text/90-dim uppercase">
                     {driver.nationality}
                   </div>
                 </div>
@@ -501,7 +497,7 @@ function TeamCard({ team }: { team: F1Team }) {
                 <div className={`text-base font-mono font-bold leading-none ${getRatingColor(team.stats[key])}`}>
                   {team.stats[key]}
                 </div>
-                <div className="text-[9px] text-app-text-dim uppercase tracking-wider mt-1">
+                <div className="text-[9px] text-app-text/90-dim uppercase tracking-wider mt-1">
                   {label}
                 </div>
               </div>
@@ -511,16 +507,16 @@ function TeamCard({ team }: { team: F1Team }) {
         {/* Info row */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs border-t border-app-border/30 pt-2">
           <div className="flex justify-between">
-            <span className="text-app-text-dim">Power Unit</span>
-            <span className="text-app-text-secondary">{team.powerUnit}</span>
+            <span className="text-app-text/90-dim">Power Unit</span>
+            <span className="text-app-text/90">{team.powerUnit}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-app-text-dim">Base</span>
-            <span className="text-app-text-secondary">{team.base}</span>
+            <span className="text-app-text/90-dim">Base</span>
+            <span className="text-app-text/90">{team.base}</span>
           </div>
           <div className="flex justify-between col-span-2">
-            <span className="text-app-text-dim">Team Principal</span>
-            <span className="text-app-text-secondary">
+            <span className="text-app-text/90-dim">Team Principal</span>
+            <span className="text-app-text/90">
               {team.teamPrincipal}
             </span>
           </div>
@@ -532,91 +528,67 @@ function TeamCard({ team }: { team: F1Team }) {
 
 function TableView() {
   return (
-    <div className="rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs text-app-text-muted uppercase tracking-wider border-b border-app-border">
-            <th className="text-left px-3 py-2">Team</th>
-            <th className="text-left px-3 py-2">Chassis</th>
-            <th className="text-left px-3 py-2">PU</th>
-            <th className="text-left px-3 py-2">Drivers</th>
-            <th className="text-center px-2 py-2">OVR</th>
-            <th className="text-center px-2 py-2">PAC</th>
-            <th className="text-center px-2 py-2">SPD</th>
-            <th className="text-center px-2 py-2">COR</th>
-            <th className="text-center px-2 py-2">BRK</th>
-            <th className="text-center px-2 py-2">TRC</th>
-            <th className="text-center px-2 py-2">AER</th>
-            <th className="text-center px-2 py-2">REL</th>
-          </tr>
-        </thead>
-        <tbody>
-          {teams.map((team) => (
-            <tr
-              key={team.id}
-              className="border-b border-app-border/50 hover:bg-app-surface-alt/30"
-            >
-              <td className="px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: team.color }}
-                  />
-                  <span className="font-medium text-app-text">
-                    {team.name}
+    <Table>
+      <THead>
+        <TH>Team</TH>
+        <TH>Chassis</TH>
+        <TH>PU</TH>
+        <TH>Drivers</TH>
+        <TH className="text-right px-2">OVR</TH>
+        <TH className="text-right px-2">PAC</TH>
+        <TH className="text-right px-2">SPD</TH>
+        <TH className="text-right px-2">COR</TH>
+        <TH className="text-right px-2">BRK</TH>
+        <TH className="text-right px-2">TRC</TH>
+        <TH className="text-right px-2">AER</TH>
+        <TH className="text-right px-2">REL</TH>
+      </THead>
+      <TBody>
+        {teams.map((team) => (
+          <TRow key={team.id}>
+            <TD>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
+                <span className="font-medium text-app-text/90">{team.name}</span>
+              </div>
+            </TD>
+            <TD>
+              <span className="font-mono text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: team.color + "20", color: team.color }}>
+                {team.chassis}
+              </span>
+            </TD>
+            <TD className="text-app-text/90 text-xs">{team.powerUnit}</TD>
+            <TD>
+              <div className="flex flex-col gap-0.5">
+                {team.drivers.map((d) => (
+                  <span key={d.number} className="text-xs text-app-text/90">
+                    {d.name}
+                    <span className="ml-1 font-mono" style={{ color: team.color }}>#{d.number}</span>
                   </span>
-                </div>
-              </td>
-              <td className="px-3 py-2">
-                <span
-                  className="font-mono text-xs px-1.5 py-0.5 rounded"
-                  style={{
-                    backgroundColor: team.color + "20",
-                    color: team.color,
-                  }}
-                >
-                  {team.chassis}
-                </span>
-              </td>
-              <td className="px-3 py-2 text-app-text-secondary text-xs">
-                {team.powerUnit}
-              </td>
-              <td className="px-3 py-2">
-                <div className="flex flex-col gap-0.5">
-                  {team.drivers.map((d) => (
-                    <span key={d.number} className="text-xs text-app-text">
-                      {d.name}
-                      <span className="ml-1 font-mono" style={{ color: team.color }}>
-                        #{d.number}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </td>
-              <StatCell value={team.stats.overallRating} bold />
-              <StatCell value={team.stats.pace} />
-              <StatCell value={team.stats.straightLineSpeed} />
-              <StatCell value={team.stats.cornerSpeed} />
-              <StatCell value={team.stats.braking} />
-              <StatCell value={team.stats.traction} />
-              <StatCell value={team.stats.aeroEfficiency} />
-              <StatCell value={team.stats.reliability} />
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                ))}
+              </div>
+            </TD>
+            <StatCell value={team.stats.overallRating} bold />
+            <StatCell value={team.stats.pace} />
+            <StatCell value={team.stats.straightLineSpeed} />
+            <StatCell value={team.stats.cornerSpeed} />
+            <StatCell value={team.stats.braking} />
+            <StatCell value={team.stats.traction} />
+            <StatCell value={team.stats.aeroEfficiency} />
+            <StatCell value={team.stats.reliability} />
+          </TRow>
+        ))}
+      </TBody>
+    </Table>
   );
 }
 
 function StatCell({ value, bold }: { value: number; bold?: boolean }) {
   return (
-    <td className="px-2 py-2 text-center">
-      <span
-        className={`font-mono text-xs ${getRatingColor(value)} ${bold ? "font-bold" : ""}`}
-      >
+    <TD className="text-right px-2">
+      <span className={`font-mono text-xs ${getRatingColor(value)} ${bold ? "font-bold" : ""}`}>
         {value}
       </span>
-    </td>
+    </TD>
   );
 }

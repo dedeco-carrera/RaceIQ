@@ -1,4 +1,4 @@
-import { eq, desc, and, or, sql, inArray, isNull } from "drizzle-orm";
+import { eq, desc, and, or, sql, inArray } from "drizzle-orm";
 import { db } from "./index";
 import { sessions, laps, trackCorners, trackOutlines, lapAnalyses, profiles, tunes } from "./schema";
 import type { TelemetryPacket, LapMeta, SessionMeta, GameId } from "../../shared/types";
@@ -157,9 +157,13 @@ export async function insertSession(
  */
 export async function updateSession(
   id: number,
-  updates: { sessionType?: string }
+  updates: { sessionType?: string; notes?: string | null }
 ): Promise<void> {
   await db.update(sessions).set(updates).where(eq(sessions.id, id)).run();
+}
+
+export async function updateLapNotes(id: number, notes: string | null): Promise<void> {
+  await db.update(laps).set({ notes }).where(eq(laps.id, id)).run();
 }
 
 /**
@@ -245,7 +249,7 @@ async function doInsertLap(
  * Get all laps with session metadata, newest first.
  * Optionally filter by profileId.
  */
-export async function getLaps(profileId?: number | null, gameId?: GameId, limit: number = 200): Promise<LapMeta[]> {
+export async function getLaps(gameId?: GameId, limit: number = 200): Promise<LapMeta[]> {
   const query = db
     .select({
       id: laps.id,
@@ -254,6 +258,7 @@ export async function getLaps(profileId?: number | null, gameId?: GameId, limit:
       lapTime: laps.lapTime,
       isValid: laps.isValid,
       invalidReason: laps.invalidReason,
+      notes: laps.notes,
       pi: laps.pi,
       carSetup: laps.carSetup,
       createdAt: laps.createdAt,
@@ -269,16 +274,8 @@ export async function getLaps(profileId?: number | null, gameId?: GameId, limit:
     .orderBy(desc(laps.id))
     .limit(limit);
 
-  const conditions = [];
-  if (profileId != null) {
-    conditions.push(or(eq(laps.profileId, profileId), isNull(laps.profileId)));
-  }
-  if (gameId) {
-    conditions.push(eq(sessions.gameId, gameId));
-  }
-
-  const rows = conditions.length > 0
-    ? await query.where(and(...conditions)).all()
+  const rows = gameId
+    ? await query.where(eq(sessions.gameId, gameId)).all()
     : await query.all();
 
   return rows.map((r) => ({
@@ -289,6 +286,7 @@ export async function getLaps(profileId?: number | null, gameId?: GameId, limit:
     carSetup: r.carSetup ?? undefined,
     tuneId: r.tuneId ?? undefined,
     tuneName: r.tuneName ?? undefined,
+    notes: r.notes ?? undefined,
     gameId: r.gameId as GameId,
   }));
 }
@@ -442,6 +440,7 @@ export async function getSessions(gameId?: GameId): Promise<SessionMeta[]> {
       createdAt: sessions.createdAt,
       gameId: sessions.gameId,
       sessionType: sessions.sessionType,
+      notes: sessions.notes,
     })
     .from(sessions)
     .orderBy(desc(sessions.id));
@@ -458,6 +457,7 @@ export async function getSessions(gameId?: GameId): Promise<SessionMeta[]> {
       .from(laps)
       .where(eq(laps.sessionId, session.id))
       .all();
+
     const validLaps = lapRows.filter((l) => l.isValid && l.lapTime > 0);
     const bestLapTime = validLaps.length > 0 ? Math.min(...validLaps.map((l) => l.lapTime)) : undefined;
     result.push({
@@ -465,6 +465,7 @@ export async function getSessions(gameId?: GameId): Promise<SessionMeta[]> {
       lapCount: lapRows.length,
       bestLapTime,
       sessionType: session.sessionType ?? undefined,
+      notes: session.notes ?? undefined,
       gameId: session.gameId as GameId,
     });
   }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
 import { client } from "../lib/rpc";
+import { Button } from "./ui/button";
 import { toPng } from "html-to-image";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -278,12 +279,11 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
     } catch { /* ignore */ }
   }, [lapId]);
 
-  // Auto-fetch only when panel is opened (not on initial mount)
+  // Load chat on open; analysis is manual-only (user must press button)
   useEffect(() => {
     if (!panelOpen) return;
-    fetchAnalysis(false);
     loadChat();
-  }, [lapId, panelOpen, fetchAnalysis, loadChat]);
+  }, [lapId, panelOpen, loadChat]);
 
   // Reset on lap change
   useEffect(() => {
@@ -324,11 +324,11 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
   const sendChat = useCallback(async () => {
     const msg = chatInput.trim();
     if (!msg || chatLoading) return;
-    setMessages((prev) => [...prev, { role: "user", content: msg }]);
-    setChatInput("");
     setChatLoading(true);
     setChatError(null);
     setStreaming("");
+    setMessages((prev) => [...prev, { role: "user", content: msg }]);
+    setChatInput("");
     try {
       const res = await fetch(`/api/laps/${lapId}/chat`, {
         method: "POST",
@@ -410,9 +410,9 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
           <div className="flex justify-start">
             <div className="rounded-lg px-2.5 py-2 bg-red-400/10 border border-red-400/20">
               <p className="text-[11px] text-red-400">{error}</p>
-              <button onClick={() => fetchAnalysis(false)} className="mt-1 text-[10px] text-app-text-secondary hover:text-app-text border border-app-border-input rounded px-2 py-0.5">
+              <Button variant="app-outline" size="app-sm" onClick={() => fetchAnalysis(false)} className="mt-1">
                 Retry
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -611,7 +611,23 @@ export const AiPanel = forwardRef<AiPanelHandle, AiPanelProps>(function AiPanel(
               </div>
             )}
 
-            {chatError && <p className="text-[10px] text-red-400">{chatError}</p>}
+            {chatError && (
+              <div className="flex justify-start">
+                <div className="rounded-lg px-2.5 py-2 bg-red-400/10 border border-red-400/20">
+                  <p className="text-[11px] text-red-400">{chatError}</p>
+                  <Button variant="app-outline" size="app-sm" onClick={() => {
+                    const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
+                    if (lastUserMsg) {
+                      setChatInput(lastUserMsg.content);
+                      setMessages(prev => prev.slice(0, -1));
+                      setChatError(null);
+                    }
+                  }} className="mt-1">
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
