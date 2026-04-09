@@ -116,6 +116,11 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
                       {hasBrake && w.brakeTemp !== undefined && (
                         <span className={brakeColor(w.brakeTemp)}>B:{Math.round(w.brakeTemp)}&deg;C</span>
                       )}
+                      {w.brakePadMm !== undefined && (() => {
+                        const pct = Math.max(0, Math.min(100, (w.brakePadMm / PAD_NEW_MM) * 100));
+                        const cls = pct > 60 ? "text-emerald-400" : pct > 30 ? "text-yellow-400" : "text-red-400";
+                        return <span className={cls}>{pct.toFixed(0)}%</span>;
+                      })()}
                       {hasPressure && w.pressure !== undefined && (
                         <span className="text-app-text-muted">{w.pressure.toFixed(1)}psi</span>
                       )}
