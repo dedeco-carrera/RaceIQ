@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test";
+import type { TelemetryPacket } from "../shared/types";
 import { CapturingDbAdapter, NullWsAdapter } from "../server/pipeline-adapters";
 
 describe("CapturingDbAdapter", () => {
@@ -31,6 +32,13 @@ describe("CapturingDbAdapter", () => {
     });
   });
 
+  test("insertLap captures sectors", async () => {
+    const db = new CapturingDbAdapter();
+    await db.insertSession(1, 1, "f1-2025");
+    await db.insertLap(1, 1, 90000, true, [], null, null, null, { s1: 30000, s2: 30000, s3: 30000 });
+    expect(db.laps[0].sectors).toEqual({ s1: 30000, s2: 30000, s3: 30000 });
+  });
+
   test("getLaps returns empty array", async () => {
     const db = new CapturingDbAdapter();
     expect(await db.getLaps("f1-2025", 100)).toEqual([]);
@@ -50,7 +58,7 @@ describe("CapturingDbAdapter", () => {
 describe("NullWsAdapter", () => {
   test("all methods are no-ops and do not throw", () => {
     const ws = new NullWsAdapter();
-    expect(() => ws.broadcast({} as any, null, null)).not.toThrow();
+    expect(() => ws.broadcast({ gameId: "f1-2025" } as TelemetryPacket, null, null)).not.toThrow();
     expect(() => ws.broadcastNotification({ type: "test" })).not.toThrow();
     expect(() => ws.broadcastDevState({ key: "value" })).not.toThrow();
   });

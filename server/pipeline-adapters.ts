@@ -47,8 +47,8 @@ export interface DbAdapter {
 export interface WsAdapter {
   broadcast(
     packet: TelemetryPacket,
-    sectors: LiveSectorData | null,
-    pit: LivePitData | null
+    sectors?: LiveSectorData | null,
+    pit?: LivePitData | null
   ): void;
   broadcastNotification(event: Record<string, unknown>): void;
   broadcastDevState(state: Record<string, unknown>): void;
@@ -68,14 +68,14 @@ export class RealDbAdapter implements DbAdapter {
   getTrackOutlineSectors(trackOrdinal: number, gameId: GameId): Promise<{ s1End: number; s2End: number } | null> {
     return getTrackOutlineSectors(trackOrdinal, gameId);
   }
-  getTuneAssignment(carOrdinal: number, trackOrdinal: number) {
+  getTuneAssignment(carOrdinal: number, trackOrdinal: number): Promise<{ carOrdinal: number; trackOrdinal: number; tuneId: number; tuneName: string } | null> {
     return getTuneAssignment(carOrdinal, trackOrdinal);
   }
 }
 
 /** Delegates to wsManager singleton. Used in production. */
 export class RealWsAdapter implements WsAdapter {
-  broadcast(packet: TelemetryPacket, sectors: LiveSectorData | null, pit: LivePitData | null): void {
+  broadcast(packet: TelemetryPacket, sectors?: LiveSectorData | null, pit?: LivePitData | null): void {
     wsManager.broadcast(packet, sectors, pit);
   }
   broadcastNotification(event: Record<string, unknown>): void {
@@ -118,7 +118,7 @@ export class CapturingDbAdapter implements DbAdapter {
 
 /** No-op WebSocket adapter. Used in tests. */
 export class NullWsAdapter implements WsAdapter {
-  broadcast(_packet: TelemetryPacket, _sectors: LiveSectorData | null, _pit: LivePitData | null): void {}
+  broadcast(_packet: TelemetryPacket, _sectors?: LiveSectorData | null, _pit?: LivePitData | null): void {}
   broadcastNotification(_event: Record<string, unknown>): void {}
   broadcastDevState(_state: Record<string, unknown>): void {}
 }
