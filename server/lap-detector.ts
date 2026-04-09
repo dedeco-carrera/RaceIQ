@@ -182,6 +182,11 @@ class LapDetector {
     if (this.currentLapNumber < 0) {
       this.currentLapNumber = packet.LapNumber;
       this._distanceAtLapStart = packet.DistanceTraveled;
+      // Seed ACC sector index from actual position so we don't fire a false transition
+      // if the car starts mid-track (grid box, pit exit) rather than at sector 0.
+      if (packet.gameId === "acc" && packet.acc) {
+        this.accPrevSectorIdx = packet.acc.currentSectorIndex;
+      }
     }
 
     // ACC: track sector index transitions live to capture s1/s2 times as they happen

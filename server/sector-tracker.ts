@@ -6,7 +6,7 @@
  * client just renders numbers.
  */
 import type { TelemetryPacket, GameId, LiveSectorData, LivePitData, LapMeta } from "../shared/types";
-import { getTrackOutlineSectors, getLaps } from "./db/queries";
+import { getTrackOutlineSectors, getLaps, getLapById } from "./db/queries";
 import { getTrackSectorsByOrdinal, getTrackOutlineByOrdinal, loadSharedTrackMeta } from "../shared/track-data";
 import { tryGetGame } from "../shared/games/registry";
 

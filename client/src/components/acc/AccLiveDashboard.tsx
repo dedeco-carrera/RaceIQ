@@ -6,7 +6,7 @@ import { PitEstimate } from "../telemetry/PitEstimate";
 import { RecordedLaps } from "../RecordedLaps";
 import { NoDataView } from "../NoDataView";
 import { useTrackName, useCarName } from "../../hooks/queries";
-import { RaceInfo } from "../LivePage";
+import { RaceInfo } from "../RaceInfo";
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ export function AccLiveDashboard() {
 
       {/* Right column: Race (with sectors) + Charts + Recorded Laps */}
       <div className="overflow-auto flex flex-col">
-        <RaceInfo packet={packet} trackName={trackName} carName={carName} showTrackMap={true} showSectors={true} />
+        <RaceInfo packet={packet} trackName={trackName} carName={carName} showTrackMap={false} showSectors={true} />
 
         <LapTimeChart packet={packet} />
 

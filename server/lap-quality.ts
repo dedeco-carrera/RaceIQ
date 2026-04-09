@@ -37,15 +37,23 @@ export function assessLapRecording(
     return { valid: false, reason: "telemetry lap time mismatch" };
   }
 
-  // Start and end positions must be close (circuit lap should return to start/finish)
-  const first = packets[0];
-  const last = packets[packets.length - 1];
-  const dx = last.PositionX - first.PositionX;
-  const dz = last.PositionZ - first.PositionZ;
-  const gap = Math.sqrt(dx * dx + dz * dz);
-  // Allow up to 15% of lap distance as tolerance (covers pit entry, wide S/F zones)
-  if (gap > lapDistance * 0.15 && gap > 100) {
-    return { valid: false, reason: "start/end positions too far apart" };
+  // Start and end positions must be close (circuit lap should return to start/finish).
+  // ACC lap 0 is always the starting/formation lap — mark invalid regardless of data.
+  if (packets[0].gameId === "acc" && packets[0].LapNumber === 0) {
+    return { valid: false, reason: "starting lap" };
+  }
+
+  // Start and end positions must be close (circuit lap should return to start/finish).
+  // Skip for ACC — carCoordinates are in a different scale to DistanceTraveled.
+  if (packets[0].gameId !== "acc") {
+    const first = packets[0];
+    const last = packets[packets.length - 1];
+    const dx = last.PositionX - first.PositionX;
+    const dz = last.PositionZ - first.PositionZ;
+    const gap = Math.sqrt(dx * dx + dz * dz);
+    if (gap > lapDistance * 0.15 && gap > 100) {
+      return { valid: false, reason: "start/end positions too far apart" };
+    }
   }
 
   return { valid: true, reason: null };
