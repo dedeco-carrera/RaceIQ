@@ -1,5 +1,5 @@
 import { useUnits } from "@/hooks/useUnits";
-import { brakeTempClasses, type BrakeTempThresholds } from "@/lib/vehicle-dynamics";
+import { brakeTempColor, BRAKE_COLOR_CLASSES, type BrakeTempThresholds } from "@/lib/vehicle-dynamics";
 
 const PAD_NEW_MM = 29; // ACC: pads start at 29mm when new
 
@@ -116,17 +116,17 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, pre
                       const pct = w.brakePadMm !== undefined
                         ? Math.max(0, Math.min(100, (w.brakePadMm / PAD_NEW_MM) * 100))
                         : 100;
-                      const { bg } = brakeTempClasses(w.brakeTemp ?? 0, isRear, brakeTempThresholds);
+                      const color = brakeTempColor(w.brakeTemp ?? 0, isRear, brakeTempThresholds);
                       return (
                         <div className="relative w-2 h-12 overflow-hidden bg-slate-700/50 shrink-0">
-                          <div className={`absolute bottom-0 left-0 right-0 ${bg}`} style={{ height: `${pct}%` }} />
+                          <div className={`absolute bottom-0 left-0 right-0 ${BRAKE_COLOR_CLASSES[color].bg}`} style={{ height: `${pct}%` }} />
                         </div>
                       );
                     })()}
                     <div className="flex flex-col text-sm font-mono font-bold tabular-nums leading-none gap-1">
                       {w.brakeTemp !== undefined && (() => {
-                        const { text } = brakeTempClasses(w.brakeTemp, isRear, brakeTempThresholds);
-                        return <span className={text}>B:{Math.round(w.brakeTemp)}&deg;C</span>;
+                        const color = brakeTempColor(w.brakeTemp, isRear, brakeTempThresholds);
+                        return <span className={BRAKE_COLOR_CLASSES[color].text}>B:{Math.round(w.brakeTemp)}&deg;C</span>;
                       })()}
                       {w.brakePadMm !== undefined && (() => {
                         const pct = Math.max(0, Math.min(100, (w.brakePadMm / PAD_NEW_MM) * 100));
