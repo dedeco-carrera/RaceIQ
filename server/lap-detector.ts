@@ -26,6 +26,7 @@ export interface SessionState {
   carPI: number;
   gameId: GameId;
   sessionUID?: string; // F1 session UID for reliable session boundary detection
+  bestLapTime: number; // best valid lap time in current session (0 = none yet)
 }
 
 export interface LapFuelData {
@@ -234,6 +235,7 @@ class LapDetector {
       carPI: packet.CarPerformanceIndex,
       gameId,
       sessionUID: packet.sessionUID,
+      bestLapTime: 0,
     };
     this.currentLapNumber = -1;
     this.lapBuffer = [];
@@ -317,6 +319,11 @@ class LapDetector {
       const invalidReason = this.invalidReason ?? (!quality.valid ? quality.reason : null);
 
       const sectors = await this.computeLapSectors(this.lapBuffer, lapTime);
+
+      // Update session best lap time
+      if (valid && (this.currentSession!.bestLapTime === 0 || lapTime < this.currentSession!.bestLapTime)) {
+        this.currentSession!.bestLapTime = lapTime;
+      }
 
       // Notify pipeline so sector tracker can update reference lap for delta
       if (valid) {
@@ -469,7 +476,10 @@ class LapDetector {
         resetIdx = i;
       }
     }
-    if (resetIdx > 0) {
+    // Only trim if the reset is in the first half of the buffer.
+    // A true running-start reset happens early (mid-previous-lap data at the front).
+    // A lap-end reset happens at the very end and must not be treated as a running start.
+    if (resetIdx > 0 && resetIdx < this.lapBuffer.length / 2) {
       console.log(
         `[Lap] Trimmed ${resetIdx} pre-start packets (running start), ${this.lapBuffer.length - resetIdx} remain`
       );
