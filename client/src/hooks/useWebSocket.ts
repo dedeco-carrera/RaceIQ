@@ -54,6 +54,8 @@ export function useWebSocket() {
             queryClient.invalidateQueries({ queryKey: ["settings"] });
           } else if (data.type === "session-laps") {
             useTelemetryStore.getState().setSessionLaps(data.laps);
+          } else if (data.type === "dev-state") {
+            useTelemetryStore.getState().setDevState(data);
           } else if (data.type === "lap-saved") {
             // Also trigger a session-laps refresh (server sends it after save)
             queryClient.invalidateQueries({ queryKey: ["laps"] });
