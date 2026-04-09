@@ -116,12 +116,10 @@ export function F1LiveDashboard() {
         <div className="border-b border-app-border grid grid-cols-2">
           <div className="border-r border-app-border">
             <TireGrid
-              tires={[
-                { label: "FL", tempC: Math.round(fToC(rawPacket!.TireTempFL)), wear: rawPacket!.TireWearFL, brakeTemp: rawPacket!.f1?.brakeTempFL ?? 0, pressure: rawPacket!.f1?.tyrePressureFL ?? 0 },
-                { label: "FR", tempC: Math.round(fToC(rawPacket!.TireTempFR)), wear: rawPacket!.TireWearFR, brakeTemp: rawPacket!.f1?.brakeTempFR ?? 0, pressure: rawPacket!.f1?.tyrePressureFR ?? 0 },
-                { label: "RL", tempC: Math.round(fToC(rawPacket!.TireTempRL)), wear: rawPacket!.TireWearRL, brakeTemp: rawPacket!.f1?.brakeTempRL ?? 0, pressure: rawPacket!.f1?.tyrePressureRL ?? 0 },
-                { label: "RR", tempC: Math.round(fToC(rawPacket!.TireTempRR)), wear: rawPacket!.TireWearRR, brakeTemp: rawPacket!.f1?.brakeTempRR ?? 0, pressure: rawPacket!.f1?.tyrePressureRR ?? 0 },
-              ]}
+              fl={{ tempC: Math.round(fToC(rawPacket!.TireTempFL)), wear: rawPacket!.TireWearFL, brakeTemp: rawPacket!.f1?.brakeTempFL ?? 0, pressure: rawPacket!.f1?.tyrePressureFL ?? 0 }}
+              fr={{ tempC: Math.round(fToC(rawPacket!.TireTempFR)), wear: rawPacket!.TireWearFR, brakeTemp: rawPacket!.f1?.brakeTempFR ?? 0, pressure: rawPacket!.f1?.tyrePressureFR ?? 0 }}
+              rl={{ tempC: Math.round(fToC(rawPacket!.TireTempRL)), wear: rawPacket!.TireWearRL, brakeTemp: rawPacket!.f1?.brakeTempRL ?? 0, pressure: rawPacket!.f1?.tyrePressureRL ?? 0 }}
+              rr={{ tempC: Math.round(fToC(rawPacket!.TireTempRR)), wear: rawPacket!.TireWearRR, brakeTemp: rawPacket!.f1?.brakeTempRR ?? 0, pressure: rawPacket!.f1?.tyrePressureRR ?? 0 }}
               healthThresholds={tryGetGame("f1-2025")?.tireHealthThresholds ?? { green: 0.70, yellow: 0.50 }}
               tempThresholds={{ blue: 80, orange: 105, red: 115 }}
               compound={rawPacket!.f1?.tyreCompound ?? "unknown"}

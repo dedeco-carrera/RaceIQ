@@ -1,7 +1,6 @@
 import { useUnits } from "@/hooks/useUnits";
 
-export interface TireData {
-  label: string;
+export interface WheelData {
   tempC: number;      // always °C — caller normalises
   wear: number;       // 0 (new) → 1 (gone)
   brakeTemp?: number; // °C, optional
@@ -9,20 +8,30 @@ export interface TireData {
 }
 
 interface TireGridProps {
-  tires: TireData[];
+  fl: WheelData;
+  fr: WheelData;
+  rl: WheelData;
+  rr: WheelData;
   healthThresholds: { green: number; yellow: number }; // fractions 0–1
   tempThresholds: { blue: number; orange: number; red: number }; // °C
   compound?: string;
   compoundStyle?: { bg: string; text: string };
 }
 
-export function TireGrid({ tires, healthThresholds, tempThresholds, compound, compoundStyle }: TireGridProps) {
+export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, compound, compoundStyle }: TireGridProps) {
   const units = useUnits();
   const greenPct = healthThresholds.green * 100;
   const yellowPct = healthThresholds.yellow * 100;
 
-  const hasBrake = tires.some((t) => t.brakeTemp !== undefined);
-  const hasPressure = tires.some((t) => t.pressure !== undefined);
+  const wheels = [
+    { label: "FL", ...fl },
+    { label: "FR", ...fr },
+    { label: "RL", ...rl },
+    { label: "RR", ...rr },
+  ];
+
+  const hasBrake = wheels.some((w) => w.brakeTemp !== undefined);
+  const hasPressure = wheels.some((w) => w.pressure !== undefined);
 
   const tempColor = (c: number) => {
     if (c > tempThresholds.red)    return "text-red-400";
@@ -61,28 +70,28 @@ export function TireGrid({ tires, healthThresholds, tempThresholds, compound, co
       </div>
       <div className="p-3">
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-          {tires.map((t) => {
-            const h = Math.max(0, (1 - t.wear) * 100);
+          {wheels.map((w) => {
+            const h = Math.max(0, (1 - w.wear) * 100);
             const hBarColor = h > greenPct ? "bg-emerald-400" : h > yellowPct ? "bg-yellow-400" : "bg-red-500";
             const hTextColor = h > greenPct ? "text-emerald-400" : h > yellowPct ? "text-yellow-400" : "text-red-400";
             const tempDisplay = units.tempUnit === "F"
-              ? Math.round(t.tempC * 9 / 5 + 32)
-              : Math.round(t.tempC);
+              ? Math.round(w.tempC * 9 / 5 + 32)
+              : Math.round(w.tempC);
 
             return (
-              <div key={t.label} className="flex items-center gap-3">
-                <div className={`w-4 h-12 rounded-sm ${tempBg(t.tempC)}`} />
+              <div key={w.label} className="flex items-center gap-3">
+                <div className={`w-4 h-12 rounded-sm ${tempBg(w.tempC)}`} />
                 <div className="flex-1 min-w-0">
-                  <div className={`text-xl font-mono font-bold tabular-nums leading-none ${tempColor(t.tempC)}`}>
+                  <div className={`text-xl font-mono font-bold tabular-nums leading-none ${tempColor(w.tempC)}`}>
                     {tempDisplay}{units.tempLabel}
                   </div>
                   {(hasBrake || hasPressure) && (
                     <div className="flex gap-3 mt-1 text-sm font-mono font-bold tabular-nums leading-none">
-                      {hasBrake && t.brakeTemp !== undefined && (
-                        <span className={brakeColor(t.brakeTemp)}>B:{Math.round(t.brakeTemp)}&deg;C</span>
+                      {hasBrake && w.brakeTemp !== undefined && (
+                        <span className={brakeColor(w.brakeTemp)}>B:{Math.round(w.brakeTemp)}&deg;C</span>
                       )}
-                      {hasPressure && t.pressure !== undefined && (
-                        <span className="text-app-text-muted">{t.pressure.toFixed(1)}psi</span>
+                      {hasPressure && w.pressure !== undefined && (
+                        <span className="text-app-text-muted">{w.pressure.toFixed(1)}psi</span>
                       )}
                     </div>
                   )}

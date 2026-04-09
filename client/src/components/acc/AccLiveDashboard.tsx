@@ -30,12 +30,10 @@ export function AccLiveDashboard() {
         {/* Tires */}
         <div className="border-b border-app-border">
           <TireGrid
-            tires={[
-              { label: "FL", tempC: packet.TireTempFL, wear: packet.TireWearFL, brakeTemp: packet.BrakeTempFrontLeft ?? 0, pressure: packet.TirePressureFrontLeft ?? 0 },
-              { label: "FR", tempC: packet.TireTempFR, wear: packet.TireWearFR, brakeTemp: packet.BrakeTempFrontRight ?? 0, pressure: packet.TirePressureFrontRight ?? 0 },
-              { label: "RL", tempC: packet.TireTempRL, wear: packet.TireWearRL, brakeTemp: packet.BrakeTempRearLeft ?? 0, pressure: packet.TirePressureRearLeft ?? 0 },
-              { label: "RR", tempC: packet.TireTempRR, wear: packet.TireWearRR, brakeTemp: packet.BrakeTempRearRight ?? 0, pressure: packet.TirePressureRearRight ?? 0 },
-            ]}
+            fl={{ tempC: packet.TireTempFL, wear: packet.TireWearFL, brakeTemp: packet.BrakeTempFrontLeft ?? 0, pressure: packet.TirePressureFrontLeft ?? 0 }}
+            fr={{ tempC: packet.TireTempFR, wear: packet.TireWearFR, brakeTemp: packet.BrakeTempFrontRight ?? 0, pressure: packet.TirePressureFrontRight ?? 0 }}
+            rl={{ tempC: packet.TireTempRL, wear: packet.TireWearRL, brakeTemp: packet.BrakeTempRearLeft ?? 0, pressure: packet.TirePressureRearLeft ?? 0 }}
+            rr={{ tempC: packet.TireTempRR, wear: packet.TireWearRR, brakeTemp: packet.BrakeTempRearRight ?? 0, pressure: packet.TirePressureRearRight ?? 0 }}
             healthThresholds={tryGetGame("acc")?.tireHealthThresholds ?? { green: 0.85, yellow: 0.70 }}
             tempThresholds={{ blue: 60, orange: 85, red: 100 }}
             compound={packet.acc?.tireCompound}
