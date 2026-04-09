@@ -75,6 +75,12 @@ export async function processPacket(packet: TelemetryPacket): Promise<void> {
   await lapDetector.feed(packet);
 
   const sectors = sectorTracker.feed(packet);
+
+  // ACC doesn't reliably broadcast BestLap via shared memory — override from server-tracked best
+  if (packet.gameId === "acc" && sectors?.bestLapTime && sectors.bestLapTime > 0) {
+    packet.BestLap = sectors.bestLapTime;
+  }
+
   const pit = pitTracker.feed(packet, sectorTracker.getTrackLength(), sectorTracker.getLapDistStart());
 
   // Track calibration only needs sparse position data (~10Hz)

@@ -80,6 +80,10 @@ class LapDetector {
   private _fuelHistory: LapFuelData[] = []; // rolling window (last 50 laps)
   private tireWearAtLapStart = { fl: -1, fr: -1, rl: -1, rr: -1 };
   private _tireWearHistory: LapTireWearData[] = []; // rolling window (last 50 laps)
+  // ACC: track native sector time transitions live (same pattern as F1 in-packet sector times)
+  private accS1: number = 0;
+  private accS2: number = 0;
+  private accPrevSectorIdx: number = 0;
 
   get session(): SessionState | null {
     return this.currentSession;
@@ -199,6 +203,17 @@ class LapDetector {
     if (this.currentLapNumber < 0) {
       this.currentLapNumber = packet.LapNumber;
       this._distanceAtLapStart = packet.DistanceTraveled;
+    }
+
+    // ACC: track sector index transitions live to capture s1/s2 times as they happen
+    if (packet.gameId === "acc" && packet.acc) {
+      const idx = packet.acc.currentSectorIndex;
+      const t = packet.acc.lastSectorTime / 1000;
+      if (idx !== this.accPrevSectorIdx && t > 0) {
+        if (this.accPrevSectorIdx === 0) this.accS1 = t;
+        else if (this.accPrevSectorIdx === 1) this.accS2 = t;
+        this.accPrevSectorIdx = idx;
+      }
     }
 
     // Buffer the packet for the current lap
@@ -565,18 +580,10 @@ class LapDetector {
       if ((p.f1?.sector2Time ?? 0) > 0) s2 = p.f1!.sector2Time;
     }
 
-    // ACC: use native sector times from currentSectorIndex/lastSectorTime transitions
-    if (s1 === 0 && s2 === 0 && gameId === "acc") {
-      let prevSector = packets[0].acc?.currentSectorIndex ?? 0;
-      for (const p of packets) {
-        const idx = p.acc?.currentSectorIndex ?? 0;
-        const t = (p.acc?.lastSectorTime ?? 0) / 1000;
-        if (idx !== prevSector && t > 0) {
-          if (prevSector === 0) s1 = t;
-          else if (prevSector === 1) s2 = t;
-          prevSector = idx;
-        }
-      }
+    // ACC: use native sector times tracked live during the lap
+    if (s1 === 0 && s2 === 0 && gameId === "acc" && this.accS1 > 0 && this.accS2 > 0) {
+      s1 = this.accS1;
+      s2 = this.accS2;
     }
 
     // Fall back to distance-fraction computation
@@ -623,6 +630,10 @@ class LapDetector {
       rl: newLapFirstPacket.TireWearRL,
       rr: newLapFirstPacket.TireWearRR,
     };
+    this.accS1 = 0;
+    this.accS2 = 0;
+    // Preserve sector index from new lap's first packet so we don't fire a false transition
+    this.accPrevSectorIdx = newLapFirstPacket.acc?.currentSectorIndex ?? 0;
   }
 }
 
