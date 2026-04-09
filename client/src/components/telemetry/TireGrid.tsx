@@ -1,4 +1,5 @@
 import { useUnits } from "@/hooks/useUnits";
+import { brakeTempClasses, type BrakeTempThresholds } from "@/lib/vehicle-dynamics";
 
 const PAD_NEW_MM = 29; // ACC: pads start at 29mm when new
 
@@ -18,7 +19,7 @@ interface TireGridProps {
   healthThresholds: { green: number; yellow: number }; // fractions 0–1
   tempThresholds: { blue: number; orange: number; red: number }; // °C
   pressureOptimal?: { min: number; max: number }; // psi
-  brakeTempThresholds?: { cold: number; front: { warm: number; hot: number }; rear: { warm: number; hot: number } };
+  brakeTempThresholds?: BrakeTempThresholds;
   compound?: string;
   compoundStyle?: { bg: string; text: string };
 }
@@ -52,25 +53,6 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, pre
     return "bg-emerald-500";
   };
 
-  const brakeColor = (t: number, isRear: boolean) => {
-    const thresholds = brakeTempThresholds
-      ? { cold: brakeTempThresholds.cold, ...(isRear ? brakeTempThresholds.rear : brakeTempThresholds.front) }
-      : { cold: 175, warm: 450, hot: 700 };
-    if (t > thresholds.hot)  return "text-red-400";
-    if (t > thresholds.warm) return "text-orange-400";
-    if (t < thresholds.cold) return "text-blue-400";
-    return "text-app-text-secondary";
-  };
-
-  const brakeBg = (t: number, isRear: boolean) => {
-    const thresholds = brakeTempThresholds
-      ? { cold: brakeTempThresholds.cold, ...(isRear ? brakeTempThresholds.rear : brakeTempThresholds.front) }
-      : { cold: 175, warm: 450, hot: 700 };
-    if (t > thresholds.hot)  return "bg-red-500";
-    if (t > thresholds.warm) return "bg-orange-400";
-    if (t < thresholds.cold) return "bg-blue-400";
-    return "bg-slate-500";
-  };
 
   return (
     <div>
@@ -134,18 +116,18 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, pre
                       const pct = w.brakePadMm !== undefined
                         ? Math.max(0, Math.min(100, (w.brakePadMm / PAD_NEW_MM) * 100))
                         : 100;
-                      const t = w.brakeTemp ?? 0;
-                      const barColor = brakeBg(t, isRear);
+                      const { bg } = brakeTempClasses(w.brakeTemp ?? 0, isRear, brakeTempThresholds);
                       return (
                         <div className="relative w-2 h-12 overflow-hidden bg-slate-700/50 shrink-0">
-                          <div className={`absolute bottom-0 left-0 right-0 ${barColor}`} style={{ height: `${pct}%` }} />
+                          <div className={`absolute bottom-0 left-0 right-0 ${bg}`} style={{ height: `${pct}%` }} />
                         </div>
                       );
                     })()}
                     <div className="flex flex-col text-sm font-mono font-bold tabular-nums leading-none gap-1">
-                      {w.brakeTemp !== undefined && (
-                        <span className={brakeColor(w.brakeTemp, isRear)}>B:{Math.round(w.brakeTemp)}&deg;C</span>
-                      )}
+                      {w.brakeTemp !== undefined && (() => {
+                        const { text } = brakeTempClasses(w.brakeTemp, isRear, brakeTempThresholds);
+                        return <span className={text}>B:{Math.round(w.brakeTemp)}&deg;C</span>;
+                      })()}
                       {w.brakePadMm !== undefined && (() => {
                         const pct = Math.max(0, Math.min(100, (w.brakePadMm / PAD_NEW_MM) * 100));
                         const cls = pct > 60 ? "text-emerald-400" : pct > 30 ? "text-yellow-400" : "text-red-400";

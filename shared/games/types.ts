@@ -44,9 +44,8 @@ export interface GameAdapter {
 
   /** Brake temp thresholds in °C — front/rear have different working ranges */
   brakeTempThresholds?: {
-    cold: number;
     front: { warm: number; hot: number };
-    rear: { warm: number; hot: number };
+    rear:  { warm: number; hot: number };
   };
 
   /** Car class names (e.g. Forza: D/C/B/A/S/R/P/X) — undefined if N/A */

@@ -211,6 +211,10 @@ export interface AccExtendedData {
   // Fuel
   fuelPerLap: number;
 
+  // Sector timing (native from game)
+  currentSectorIndex: number;  // 0=S1, 1=S2, 2=S3
+  lastSectorTime: number;       // ms, time of last completed sector
+
   // Damage
   carDamage: {
     front: number;

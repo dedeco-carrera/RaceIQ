@@ -426,6 +426,30 @@ export function brakeTempColor(temp: number): string {
   return COLORS.gray;
 }
 
+export type BrakeTempThresholds = {
+  front: { warm: number; hot: number };
+  rear:  { warm: number; hot: number };
+};
+
+const DEFAULT_BRAKE_THRESHOLDS: BrakeTempThresholds = {
+  front: { warm: 450, hot: 700 },
+  rear:  { warm: 450, hot: 700 },
+};
+
+/** Returns { text, bg } Tailwind classes for a brake temperature reading. */
+export function brakeTempClasses(
+  temp: number,
+  isRear: boolean,
+  thresholds?: BrakeTempThresholds
+): { text: string; bg: string } {
+  const { warm, hot } = isRear
+    ? (thresholds ?? DEFAULT_BRAKE_THRESHOLDS).rear
+    : (thresholds ?? DEFAULT_BRAKE_THRESHOLDS).front;
+  if (temp > hot)  return { text: "text-red-400",    bg: "bg-red-500" };
+  if (temp > warm) return { text: "text-orange-400", bg: "bg-orange-400" };
+  return               { text: "text-blue-400",    bg: "bg-blue-400" };
+}
+
 // ── Slip Angle Color ──────────────────────────────────────────────
 
 export function slipAngleColor(deg: number): string {

@@ -565,6 +565,20 @@ class LapDetector {
       if ((p.f1?.sector2Time ?? 0) > 0) s2 = p.f1!.sector2Time;
     }
 
+    // ACC: use native sector times from currentSectorIndex/lastSectorTime transitions
+    if (s1 === 0 && s2 === 0 && gameId === "acc") {
+      let prevSector = packets[0].acc?.currentSectorIndex ?? 0;
+      for (const p of packets) {
+        const idx = p.acc?.currentSectorIndex ?? 0;
+        const t = (p.acc?.lastSectorTime ?? 0) / 1000;
+        if (idx !== prevSector && t > 0) {
+          if (prevSector === 0) s1 = t;
+          else if (prevSector === 1) s2 = t;
+          prevSector = idx;
+        }
+      }
+    }
+
     // Fall back to distance-fraction computation
     if (s1 === 0 || s2 === 0) {
       const startDist = packets[0].DistanceTraveled;
