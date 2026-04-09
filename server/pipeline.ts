@@ -33,7 +33,7 @@ lapDetector.onSessionStart = async (session) => {
 
 lapDetector.onLapComplete_ = (event) => {
   if (event.isValid) {
-    sectorTracker.updateRefLap(event.packets, event.lapDistStart, event.lapTime, event.sectors);
+    sectorTracker.updateRefLap(event.packets, event.lapTime, event.sectors);
     // Only ACC uses distance-based wear curves; F1/Forza use simple rolling average
     const session = lapDetector.session;
     if (session && PitTracker.shouldUseCurves(session.gameId)) {
@@ -105,4 +105,10 @@ export async function processPacket(packet: TelemetryPacket): Promise<void> {
 
   // Broadcast to WebSocket clients (handles 30Hz throttle internally)
   wsManager.broadcast(packet, sectors, pit);
+
+  wsManager.broadcastDevState({
+    lapDetector: lapDetector.getDebugState(),
+    sectorTracker: sectorTracker.getDebugState(),
+    pitTracker: pitTracker.getDebugState(),
+  });
 }
