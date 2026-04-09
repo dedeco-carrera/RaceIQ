@@ -9,22 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as Fm23RouteImport } from './routes/fm23'
 import { Route as F125RouteImport } from './routes/f125'
 import { Route as AccRouteImport } from './routes/acc'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as OnboardingIndexRouteImport } from './routes/onboarding/index'
 import { Route as Fm23IndexRouteImport } from './routes/fm23/index'
 import { Route as F125IndexRouteImport } from './routes/f125/index'
 import { Route as AccIndexRouteImport } from './routes/acc/index'
-import { Route as OnboardingWheelRouteImport } from './routes/onboarding/wheel'
-import { Route as OnboardingWelcomeRouteImport } from './routes/onboarding/welcome'
-import { Route as OnboardingUnitsRouteImport } from './routes/onboarding/units'
-import { Route as OnboardingSoundRouteImport } from './routes/onboarding/sound'
-import { Route as OnboardingProfileRouteImport } from './routes/onboarding/profile'
-import { Route as OnboardingConnectionRouteImport } from './routes/onboarding/connection'
-import { Route as OnboardingCommunityRouteImport } from './routes/onboarding/community'
 import { Route as Fm23TunesRouteImport } from './routes/fm23/tunes'
 import { Route as Fm23TracksRouteImport } from './routes/fm23/tracks'
 import { Route as Fm23SetupRouteImport } from './routes/fm23/setup'
@@ -64,11 +55,6 @@ import { Route as Fm23LiveDriverRouteImport } from './routes/fm23/live/driver'
 import { Route as Fm23CarsCarOrdinalRouteImport } from './routes/fm23/cars_.$carOrdinal'
 import { Route as Fm23TunesEditTuneIdRouteImport } from './routes/fm23/tunes/edit.$tuneId'
 
-const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const Fm23Route = Fm23RouteImport.update({
   id: '/fm23',
   path: '/fm23',
@@ -89,11 +75,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => OnboardingRoute,
-} as any)
 const Fm23IndexRoute = Fm23IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -108,41 +89,6 @@ const AccIndexRoute = AccIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AccRoute,
-} as any)
-const OnboardingWheelRoute = OnboardingWheelRouteImport.update({
-  id: '/wheel',
-  path: '/wheel',
-  getParentRoute: () => OnboardingRoute,
-} as any)
-const OnboardingWelcomeRoute = OnboardingWelcomeRouteImport.update({
-  id: '/welcome',
-  path: '/welcome',
-  getParentRoute: () => OnboardingRoute,
-} as any)
-const OnboardingUnitsRoute = OnboardingUnitsRouteImport.update({
-  id: '/units',
-  path: '/units',
-  getParentRoute: () => OnboardingRoute,
-} as any)
-const OnboardingSoundRoute = OnboardingSoundRouteImport.update({
-  id: '/sound',
-  path: '/sound',
-  getParentRoute: () => OnboardingRoute,
-} as any)
-const OnboardingProfileRoute = OnboardingProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => OnboardingRoute,
-} as any)
-const OnboardingConnectionRoute = OnboardingConnectionRouteImport.update({
-  id: '/connection',
-  path: '/connection',
-  getParentRoute: () => OnboardingRoute,
-} as any)
-const OnboardingCommunityRoute = OnboardingCommunityRouteImport.update({
-  id: '/community',
-  path: '/community',
-  getParentRoute: () => OnboardingRoute,
 } as any)
 const Fm23TunesRoute = Fm23TunesRouteImport.update({
   id: '/tunes',
@@ -340,7 +286,6 @@ export interface FileRoutesByFullPath {
   '/acc': typeof AccRouteWithChildren
   '/f125': typeof F125RouteWithChildren
   '/fm23': typeof Fm23RouteWithChildren
-  '/onboarding': typeof OnboardingRouteWithChildren
   '/acc/analyse': typeof AccAnalyseRoute
   '/acc/cars': typeof AccCarsRoute
   '/acc/compare': typeof AccCompareRoute
@@ -367,17 +312,9 @@ export interface FileRoutesByFullPath {
   '/fm23/setup': typeof Fm23SetupRouteWithChildren
   '/fm23/tracks': typeof Fm23TracksRoute
   '/fm23/tunes': typeof Fm23TunesRouteWithChildren
-  '/onboarding/community': typeof OnboardingCommunityRoute
-  '/onboarding/connection': typeof OnboardingConnectionRoute
-  '/onboarding/profile': typeof OnboardingProfileRoute
-  '/onboarding/sound': typeof OnboardingSoundRoute
-  '/onboarding/units': typeof OnboardingUnitsRoute
-  '/onboarding/welcome': typeof OnboardingWelcomeRoute
-  '/onboarding/wheel': typeof OnboardingWheelRoute
   '/acc/': typeof AccIndexRoute
   '/f125/': typeof F125IndexRoute
   '/fm23/': typeof Fm23IndexRoute
-  '/onboarding/': typeof OnboardingIndexRoute
   '/fm23/cars/$carOrdinal': typeof Fm23CarsCarOrdinalRoute
   '/fm23/live/driver': typeof Fm23LiveDriverRoute
   '/fm23/live/pit': typeof Fm23LivePitRoute
@@ -414,17 +351,9 @@ export interface FileRoutesByTo {
   '/fm23/raw': typeof Fm23RawRoute
   '/fm23/sessions': typeof Fm23SessionsRoute
   '/fm23/tracks': typeof Fm23TracksRoute
-  '/onboarding/community': typeof OnboardingCommunityRoute
-  '/onboarding/connection': typeof OnboardingConnectionRoute
-  '/onboarding/profile': typeof OnboardingProfileRoute
-  '/onboarding/sound': typeof OnboardingSoundRoute
-  '/onboarding/units': typeof OnboardingUnitsRoute
-  '/onboarding/welcome': typeof OnboardingWelcomeRoute
-  '/onboarding/wheel': typeof OnboardingWheelRoute
   '/acc': typeof AccIndexRoute
   '/f125': typeof F125IndexRoute
   '/fm23': typeof Fm23IndexRoute
-  '/onboarding': typeof OnboardingIndexRoute
   '/fm23/cars/$carOrdinal': typeof Fm23CarsCarOrdinalRoute
   '/fm23/live/driver': typeof Fm23LiveDriverRoute
   '/fm23/live/pit': typeof Fm23LivePitRoute
@@ -444,7 +373,6 @@ export interface FileRoutesById {
   '/acc': typeof AccRouteWithChildren
   '/f125': typeof F125RouteWithChildren
   '/fm23': typeof Fm23RouteWithChildren
-  '/onboarding': typeof OnboardingRouteWithChildren
   '/acc/analyse': typeof AccAnalyseRoute
   '/acc/cars': typeof AccCarsRoute
   '/acc/compare': typeof AccCompareRoute
@@ -471,17 +399,9 @@ export interface FileRoutesById {
   '/fm23/setup': typeof Fm23SetupRouteWithChildren
   '/fm23/tracks': typeof Fm23TracksRoute
   '/fm23/tunes': typeof Fm23TunesRouteWithChildren
-  '/onboarding/community': typeof OnboardingCommunityRoute
-  '/onboarding/connection': typeof OnboardingConnectionRoute
-  '/onboarding/profile': typeof OnboardingProfileRoute
-  '/onboarding/sound': typeof OnboardingSoundRoute
-  '/onboarding/units': typeof OnboardingUnitsRoute
-  '/onboarding/welcome': typeof OnboardingWelcomeRoute
-  '/onboarding/wheel': typeof OnboardingWheelRoute
   '/acc/': typeof AccIndexRoute
   '/f125/': typeof F125IndexRoute
   '/fm23/': typeof Fm23IndexRoute
-  '/onboarding/': typeof OnboardingIndexRoute
   '/fm23/cars_/$carOrdinal': typeof Fm23CarsCarOrdinalRoute
   '/fm23/live/driver': typeof Fm23LiveDriverRoute
   '/fm23/live/pit': typeof Fm23LivePitRoute
@@ -502,7 +422,6 @@ export interface FileRouteTypes {
     | '/acc'
     | '/f125'
     | '/fm23'
-    | '/onboarding'
     | '/acc/analyse'
     | '/acc/cars'
     | '/acc/compare'
@@ -529,17 +448,9 @@ export interface FileRouteTypes {
     | '/fm23/setup'
     | '/fm23/tracks'
     | '/fm23/tunes'
-    | '/onboarding/community'
-    | '/onboarding/connection'
-    | '/onboarding/profile'
-    | '/onboarding/sound'
-    | '/onboarding/units'
-    | '/onboarding/welcome'
-    | '/onboarding/wheel'
     | '/acc/'
     | '/f125/'
     | '/fm23/'
-    | '/onboarding/'
     | '/fm23/cars/$carOrdinal'
     | '/fm23/live/driver'
     | '/fm23/live/pit'
@@ -576,17 +487,9 @@ export interface FileRouteTypes {
     | '/fm23/raw'
     | '/fm23/sessions'
     | '/fm23/tracks'
-    | '/onboarding/community'
-    | '/onboarding/connection'
-    | '/onboarding/profile'
-    | '/onboarding/sound'
-    | '/onboarding/units'
-    | '/onboarding/welcome'
-    | '/onboarding/wheel'
     | '/acc'
     | '/f125'
     | '/fm23'
-    | '/onboarding'
     | '/fm23/cars/$carOrdinal'
     | '/fm23/live/driver'
     | '/fm23/live/pit'
@@ -605,7 +508,6 @@ export interface FileRouteTypes {
     | '/acc'
     | '/f125'
     | '/fm23'
-    | '/onboarding'
     | '/acc/analyse'
     | '/acc/cars'
     | '/acc/compare'
@@ -632,17 +534,9 @@ export interface FileRouteTypes {
     | '/fm23/setup'
     | '/fm23/tracks'
     | '/fm23/tunes'
-    | '/onboarding/community'
-    | '/onboarding/connection'
-    | '/onboarding/profile'
-    | '/onboarding/sound'
-    | '/onboarding/units'
-    | '/onboarding/welcome'
-    | '/onboarding/wheel'
     | '/acc/'
     | '/f125/'
     | '/fm23/'
-    | '/onboarding/'
     | '/fm23/cars_/$carOrdinal'
     | '/fm23/live/driver'
     | '/fm23/live/pit'
@@ -662,18 +556,10 @@ export interface RootRouteChildren {
   AccRoute: typeof AccRouteWithChildren
   F125Route: typeof F125RouteWithChildren
   Fm23Route: typeof Fm23RouteWithChildren
-  OnboardingRoute: typeof OnboardingRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/fm23': {
       id: '/fm23'
       path: '/fm23'
@@ -702,13 +588,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/onboarding/': {
-      id: '/onboarding/'
-      path: '/'
-      fullPath: '/onboarding/'
-      preLoaderRoute: typeof OnboardingIndexRouteImport
-      parentRoute: typeof OnboardingRoute
-    }
     '/fm23/': {
       id: '/fm23/'
       path: '/'
@@ -729,55 +608,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/acc/'
       preLoaderRoute: typeof AccIndexRouteImport
       parentRoute: typeof AccRoute
-    }
-    '/onboarding/wheel': {
-      id: '/onboarding/wheel'
-      path: '/wheel'
-      fullPath: '/onboarding/wheel'
-      preLoaderRoute: typeof OnboardingWheelRouteImport
-      parentRoute: typeof OnboardingRoute
-    }
-    '/onboarding/welcome': {
-      id: '/onboarding/welcome'
-      path: '/welcome'
-      fullPath: '/onboarding/welcome'
-      preLoaderRoute: typeof OnboardingWelcomeRouteImport
-      parentRoute: typeof OnboardingRoute
-    }
-    '/onboarding/units': {
-      id: '/onboarding/units'
-      path: '/units'
-      fullPath: '/onboarding/units'
-      preLoaderRoute: typeof OnboardingUnitsRouteImport
-      parentRoute: typeof OnboardingRoute
-    }
-    '/onboarding/sound': {
-      id: '/onboarding/sound'
-      path: '/sound'
-      fullPath: '/onboarding/sound'
-      preLoaderRoute: typeof OnboardingSoundRouteImport
-      parentRoute: typeof OnboardingRoute
-    }
-    '/onboarding/profile': {
-      id: '/onboarding/profile'
-      path: '/profile'
-      fullPath: '/onboarding/profile'
-      preLoaderRoute: typeof OnboardingProfileRouteImport
-      parentRoute: typeof OnboardingRoute
-    }
-    '/onboarding/connection': {
-      id: '/onboarding/connection'
-      path: '/connection'
-      fullPath: '/onboarding/connection'
-      preLoaderRoute: typeof OnboardingConnectionRouteImport
-      parentRoute: typeof OnboardingRoute
-    }
-    '/onboarding/community': {
-      id: '/onboarding/community'
-      path: '/community'
-      fullPath: '/onboarding/community'
-      preLoaderRoute: typeof OnboardingCommunityRouteImport
-      parentRoute: typeof OnboardingRoute
     }
     '/fm23/tunes': {
       id: '/fm23/tunes'
@@ -1214,38 +1044,11 @@ const Fm23RouteChildren: Fm23RouteChildren = {
 
 const Fm23RouteWithChildren = Fm23Route._addFileChildren(Fm23RouteChildren)
 
-interface OnboardingRouteChildren {
-  OnboardingCommunityRoute: typeof OnboardingCommunityRoute
-  OnboardingConnectionRoute: typeof OnboardingConnectionRoute
-  OnboardingProfileRoute: typeof OnboardingProfileRoute
-  OnboardingSoundRoute: typeof OnboardingSoundRoute
-  OnboardingUnitsRoute: typeof OnboardingUnitsRoute
-  OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute
-  OnboardingWheelRoute: typeof OnboardingWheelRoute
-  OnboardingIndexRoute: typeof OnboardingIndexRoute
-}
-
-const OnboardingRouteChildren: OnboardingRouteChildren = {
-  OnboardingCommunityRoute: OnboardingCommunityRoute,
-  OnboardingConnectionRoute: OnboardingConnectionRoute,
-  OnboardingProfileRoute: OnboardingProfileRoute,
-  OnboardingSoundRoute: OnboardingSoundRoute,
-  OnboardingUnitsRoute: OnboardingUnitsRoute,
-  OnboardingWelcomeRoute: OnboardingWelcomeRoute,
-  OnboardingWheelRoute: OnboardingWheelRoute,
-  OnboardingIndexRoute: OnboardingIndexRoute,
-}
-
-const OnboardingRouteWithChildren = OnboardingRoute._addFileChildren(
-  OnboardingRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccRoute: AccRouteWithChildren,
   F125Route: F125RouteWithChildren,
   Fm23Route: Fm23RouteWithChildren,
-  OnboardingRoute: OnboardingRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
