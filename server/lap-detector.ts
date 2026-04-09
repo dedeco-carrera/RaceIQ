@@ -16,8 +16,8 @@ import { extractCurbSegments, recordCurbData, getTrackSectorsByOrdinal, loadShar
 import { getTuneAssignment } from "./db/tune-queries";
 import { assessLapRecording } from "./lap-quality";
 import { tryGetGame } from "../shared/games/registry";
+import { detectSessionBoundary, detectLapBoundary, detectLapReset } from "./lap-detection";
 
-const SESSION_TIMEOUT_MS = 5 * 60_000; // 5 minutes of silence = new session
 
 export interface SessionState {
   sessionId: number;
@@ -126,37 +126,23 @@ class LapDetector {
       await this.startNewSession(packet);
     }
 
-    // Race restart / final lap detection: CurrentLap resets to 0 mid-lap,
-    // or distance jumps backwards significantly.
+    // Race restart / final lap detection
     if (
       this.currentLapNumber >= 0 &&
       this.lapBuffer.length > 30 &&
       packet.LapNumber === this.currentLapNumber
     ) {
-      const lastPkt = this.lapBuffer[this.lapBuffer.length - 1];
-
-      // CurrentLap reset to 0 while we had meaningful lap time
-      const lapTimeReset = lastPkt.CurrentLap > 5 && packet.CurrentLap === 0;
-
-      // Large distance drop (>500m backwards)
-      const distanceDrop = lastPkt.DistanceTraveled - packet.DistanceTraveled > 500;
-
-      if (lapTimeReset || distanceDrop) {
-        // If LastLap changed, this is a completed lap (final race lap or
-        // lap completion where LapNumber didn't increment), not a restart.
-        const lastLapChanged = packet.LastLap > 0 && this.lastLastLap > 0 && packet.LastLap !== this.lastLastLap;
-
-        if (lastLapChanged) {
-          console.log(
-            `[Lap] Final lap completed: LastLap changed ${this.lastLastLap.toFixed(3)} -> ${packet.LastLap.toFixed(3)}`
-          );
-          await this.onLapComplete(packet);
-        } else {
-          console.log(
-            `[Lap] Race restart detected: ${lapTimeReset ? `CurrentLap ${lastPkt.CurrentLap.toFixed(1)}s -> ${packet.CurrentLap.toFixed(1)}s` : ""}${lapTimeReset && distanceDrop ? ", " : ""}${distanceDrop ? `Distance ${lastPkt.DistanceTraveled.toFixed(0)} -> ${packet.DistanceTraveled.toFixed(0)}` : ""}. Discarding buffer.`
-          );
-          this.resetLapState(packet);
-        }
+      const resetResult = detectLapReset(
+        this.lapBuffer[this.lapBuffer.length - 1],
+        this.lastLastLap,
+        packet
+      );
+      if (resetResult.action === "complete-final-lap") {
+        console.log(`[Lap] Final lap completed: LastLap ${this.lastLastLap.toFixed(3)} -> ${packet.LastLap.toFixed(3)}`);
+        await this.onLapComplete(packet);
+      } else if (resetResult.action === "reset-restart") {
+        console.log(`[Lap] Race restart detected — discarding buffer`);
+        this.resetLapState(packet);
       }
     }
 
@@ -167,9 +153,7 @@ class LapDetector {
       packet.LapNumber === this.currentLapNumber
     ) {
       if (this.lapIsValid) {
-        console.log(
-          `[Lap] Rewind detected: timestamp went from ${this.lastTimestampMS} to ${packet.TimestampMS}. Marking lap invalid.`
-        );
+        console.log(`[Lap] Rewind: timestamp ${this.lastTimestampMS} -> ${packet.TimestampMS}. Marking lap invalid.`);
       }
       this.lapIsValid = false;
       this.invalidReason = "rewind";
@@ -177,22 +161,16 @@ class LapDetector {
 
     // Lap boundary detection
     if (this.currentLapNumber >= 0 && packet.LapNumber !== this.currentLapNumber) {
-      if (packet.LapNumber < this.currentLapNumber) {
-        // Rewind across lap boundary — buffer has mixed-lap data, discard and reset
-        console.log(
-          `[Lap] Rewind across lap boundary: lap ${this.currentLapNumber} -> ${packet.LapNumber}. Discarding buffer.`
-        );
+      const lapResult = detectLapBoundary(this.currentLapNumber, packet);
+      if (lapResult.action === "reset-rewind") {
+        console.log(`[Lap] Rewind across lap boundary: ${this.currentLapNumber} -> ${packet.LapNumber}. Discarding buffer.`);
         this.resetLapState(packet);
-      } else if (packet.LapNumber > this.currentLapNumber + 1) {
-        // Lap skip — jumped more than 1 lap, buffer spans multiple laps
-        console.log(
-          `[Lap] Lap skip detected: lap ${this.currentLapNumber} -> ${packet.LapNumber} (skipped ${packet.LapNumber - this.currentLapNumber - 1}). Marking invalid.`
-        );
+      } else if (lapResult.action === "complete-skip") {
+        console.log(`[Lap] Lap skip: ${this.currentLapNumber} -> ${packet.LapNumber}. Marking invalid.`);
         this.lapIsValid = false;
-        this.invalidReason = "lap skip";
+        this.invalidReason = lapResult.invalidReason;
         await this.onLapComplete(packet);
       } else {
-        // Normal lap increment (+1)
         await this.onLapComplete(packet);
       }
     }
@@ -222,76 +200,20 @@ class LapDetector {
     this.lastPacketTime = now;
   }
 
-  private shouldStartNewSession(
-    packet: TelemetryPacket,
-    now: number
-  ): boolean {
-    if (!this.currentSession) return true;
-
-    // F1: session UID change is the authoritative signal
-    if (packet.sessionUID && this.currentSession.sessionUID &&
-        packet.sessionUID !== this.currentSession.sessionUID) {
-      console.log(
-        `[Session] F1 sessionUID changed: ${this.currentSession.sessionUID} -> ${packet.sessionUID}`
-      );
-      return true;
-    }
-
-    // Lap number reset (e.g. new race on same track) — if we were on lap 3+
-    // and lap number drops back to 1, it's a new session
-    if (
-      this.currentLapNumber > 1 &&
-      packet.LapNumber === 1 &&
-      packet.LapNumber < this.currentLapNumber
-    ) {
-      console.log(
-        `[Session] Lap number reset: ${this.currentLapNumber} -> ${packet.LapNumber} (new race)`
-      );
-      return true;
-    }
-
-    // DistanceTraveled reset — total distance dropped significantly
-    // Skip for games with session UIDs (F1) — distance resets during qualifying/practice
-    // are normal (out-lap → flying lap) and the UID handles real session changes
-    if (
-      !this.currentSession.sessionUID &&
-      this.lapBuffer.length > 0 &&
-      this.lapBuffer[this.lapBuffer.length - 1].DistanceTraveled > 1000 &&
-      packet.DistanceTraveled < 500
-    ) {
-      console.log(
-        `[Session] Distance reset: ${this.lapBuffer[this.lapBuffer.length - 1].DistanceTraveled.toFixed(0)} -> ${packet.DistanceTraveled.toFixed(0)} (new race)`
-      );
-      return true;
-    }
-
-    // Car or track changed
-    if (packet.CarOrdinal !== this.currentSession.carOrdinal) {
-      console.log(
-        `[Session] Car changed: ${this.currentSession.carOrdinal} -> ${packet.CarOrdinal}`
-      );
-      return true;
-    }
-    if (packet.TrackOrdinal && packet.TrackOrdinal !== this.currentSession.trackOrdinal) {
-      console.log(
-        `[Session] Track changed: ${this.currentSession.trackOrdinal} -> ${packet.TrackOrdinal}`
-      );
-      return true;
-    }
-
-    // Silence timeout — only for games without a session UID
-    if (
-      !this.currentSession.sessionUID &&
-      this.lastPacketTime > 0 &&
-      now - this.lastPacketTime > SESSION_TIMEOUT_MS
-    ) {
-      console.log(
-        `[Session] Silence timeout: ${now - this.lastPacketTime}ms since last packet`
-      );
-      return true;
-    }
-
-    return false;
+  private shouldStartNewSession(packet: TelemetryPacket, now: number): boolean {
+    const lastDist = this.lapBuffer.length > 0
+      ? this.lapBuffer[this.lapBuffer.length - 1].DistanceTraveled
+      : null;
+    const reason = detectSessionBoundary(
+      this.currentSession,
+      this.currentLapNumber,
+      lastDist,
+      this.lastPacketTime,
+      packet,
+      now
+    );
+    if (reason) console.log(`[Session] New session: ${reason}`);
+    return reason !== null;
   }
 
   private async startNewSession(packet: TelemetryPacket): Promise<void> {
