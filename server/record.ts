@@ -104,6 +104,9 @@ async function recordUdp(
         // Ignore parse errors during metadata resolution
       }
     }
+    if (!metaResolved && parsedCount === META_RESOLVE_LIMIT) {
+      console.log(`[Record] Metadata not resolved after ${META_RESOLVE_LIMIT} packets — proceeding without track/car info`);
+    }
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -130,6 +133,11 @@ async function recordUdp(
     console.log(`[Record] Done. ${recorder.packetCount} packets recorded.`);
     process.exit(0);
   };
+
+  sock.on("error", (err: Error) => {
+    console.error("[Record] UDP socket error:", err);
+    shutdown();
+  });
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
