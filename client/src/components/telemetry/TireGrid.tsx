@@ -1,5 +1,19 @@
 import { useUnits } from "@/hooks/useUnits";
 
+function BrakePad({ tempC }: { tempC: number }) {
+  const fill = tempC > 700 ? "#ef4444" : tempC > 450 ? "#f97316" : tempC < 175 ? "#60a5fa" : "#64748b";
+  return (
+    <svg width="7" height="44" viewBox="0 0 7 44" className="shrink-0">
+      {/* Steel backing plate */}
+      <rect x="0" y="0" width="7" height="9" rx="1" fill="#334155" />
+      {/* Friction material — colored by temperature */}
+      <rect x="0.5" y="9" width="6" height="35" rx="0.5" fill={fill} />
+      {/* Subtle sheen */}
+      <rect x="1.5" y="10" width="2" height="33" rx="0.5" fill="white" opacity="0.07" />
+    </svg>
+  );
+}
+
 export interface WheelData {
   tempC: number;      // always °C — caller normalises
   wear: number;       // 0 (new) → 1 (gone)
@@ -79,8 +93,9 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
               : Math.round(w.tempC);
 
             return (
-              <div key={w.label} className="flex items-center gap-3">
+              <div key={w.label} className="flex items-center gap-2">
                 <div className={`w-4 h-12 rounded-sm ${tempBg(w.tempC)}`} />
+                {hasBrake && <BrakePad tempC={w.brakeTemp ?? 0} />}
                 <div className="flex-1 min-w-0">
                   <div className={`text-xl font-mono font-bold tabular-nums leading-none ${tempColor(w.tempC)}`}>
                     {tempDisplay}{units.tempLabel}
