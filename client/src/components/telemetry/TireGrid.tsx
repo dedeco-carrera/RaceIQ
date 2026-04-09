@@ -103,17 +103,39 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
               ? Math.round(w.tempC * 9 / 5 + 32)
               : Math.round(w.tempC);
 
+            const isLeft = w.label.endsWith("L");
+
+            const isRight = !isLeft;
+
             return (
-              <div key={w.label} className="flex items-center gap-2">
-                <div className={`w-4 h-12 rounded-sm ${tempBg(w.tempC)}`} />
-                {hasBrake && <BrakePad tempC={w.brakeTemp ?? 0} padMm={w.brakePadMm} />}
-                <div className="flex-1 min-w-0">
+              <div key={w.label} className={`flex items-center gap-2 ${isRight ? "flex-row-reverse" : ""}`}>
+                {/* Tire text — outside edge */}
+                <div className={`flex-1 min-w-0 ${isLeft ? "text-right" : ""}`}>
                   <div className={`text-xl font-mono font-bold tabular-nums leading-none ${tempColor(w.tempC)}`}>
                     {tempDisplay}{units.tempLabel}
                   </div>
-                  {(hasBrake || hasPressure) && (
-                    <div className="flex gap-3 mt-1 text-sm font-mono font-bold tabular-nums leading-none">
-                      {hasBrake && w.brakeTemp !== undefined && (
+                  {hasPressure && w.pressure !== undefined && (
+                    <div className="mt-1 text-sm font-mono font-bold tabular-nums leading-none">
+                      <span className="text-app-text-muted">{w.pressure.toFixed(1)}psi</span>
+                    </div>
+                  )}
+                  <div className={`flex items-center gap-2 mt-1 ${isLeft ? "flex-row-reverse" : ""}`}>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${hBarColor}`} style={{ width: `${h}%` }} />
+                    </div>
+                    <span className={`text-xs font-mono font-bold tabular-nums ${hTextColor}`}>{h.toFixed(0)}%</span>
+                  </div>
+                </div>
+
+                {/* Wheel bar */}
+                <div className={`w-4 h-12 rounded-sm shrink-0 ${tempBg(w.tempC)}`} />
+
+                {/* Brake group — center of car */}
+                {hasBrake && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <BrakePad tempC={w.brakeTemp ?? 0} padMm={w.brakePadMm} />
+                    <div className="flex flex-col text-sm font-mono font-bold tabular-nums leading-none gap-1">
+                      {w.brakeTemp !== undefined && (
                         <span className={brakeColor(w.brakeTemp)}>B:{Math.round(w.brakeTemp)}&deg;C</span>
                       )}
                       {w.brakePadMm !== undefined && (() => {
@@ -121,18 +143,9 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
                         const cls = pct > 60 ? "text-emerald-400" : pct > 30 ? "text-yellow-400" : "text-red-400";
                         return <span className={cls}>{pct.toFixed(0)}%</span>;
                       })()}
-                      {hasPressure && w.pressure !== undefined && (
-                        <span className="text-app-text-muted">{w.pressure.toFixed(1)}psi</span>
-                      )}
                     </div>
-                  )}
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${hBarColor}`} style={{ width: `${h}%` }} />
-                    </div>
-                    <span className={`text-xs font-mono font-bold tabular-nums ${hTextColor}`}>{h.toFixed(0)}%</span>
                   </div>
-                </div>
+                )}
               </div>
             );
           })}
