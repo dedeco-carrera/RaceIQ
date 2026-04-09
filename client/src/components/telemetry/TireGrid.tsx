@@ -1,28 +1,6 @@
 import { useUnits } from "@/hooks/useUnits";
 
 const PAD_NEW_MM = 29; // ACC: pads start at 29mm when new
-const PAD_TOTAL_H = 35; // px height of friction material area in SVG
-
-function BrakePad({ tempC, padMm }: { tempC: number; padMm?: number }) {
-  const fill = tempC > 700 ? "#ef4444" : tempC > 450 ? "#f97316" : tempC < 175 ? "#60a5fa" : "#64748b";
-  // If padMm provided, height shows remaining material; otherwise full height
-  const frictionH = padMm !== undefined
-    ? Math.max(2, (Math.min(padMm, PAD_NEW_MM) / PAD_NEW_MM) * PAD_TOTAL_H)
-    : PAD_TOTAL_H;
-  const frictionY = 9 + (PAD_TOTAL_H - frictionH); // anchor to bottom of friction zone
-  return (
-    <svg width="7" height="44" viewBox="0 0 7 44" className="shrink-0">
-      {/* Steel backing plate */}
-      <rect x="0" y="0" width="7" height="9" rx="1" fill="#334155" />
-      {/* Worn-away zone (empty) */}
-      <rect x="0.5" y="9" width="6" height={PAD_TOTAL_H} rx="0.5" fill="#1e293b" />
-      {/* Remaining friction material — height = wear remaining */}
-      <rect x="0.5" y={frictionY} width="6" height={frictionH} rx="0.5" fill={fill} />
-      {/* Subtle sheen */}
-      <rect x="1.5" y={frictionY + 1} width="2" height={Math.max(0, frictionH - 2)} rx="0.5" fill="white" opacity="0.07" />
-    </svg>
-  );
-}
 
 export interface WheelData {
   tempC: number;       // always °C — caller normalises
@@ -39,11 +17,13 @@ interface TireGridProps {
   rr: WheelData;
   healthThresholds: { green: number; yellow: number }; // fractions 0–1
   tempThresholds: { blue: number; orange: number; red: number }; // °C
+  pressureOptimal?: { min: number; max: number }; // psi
+  brakeTempThresholds?: { cold: number; front: { warm: number; hot: number }; rear: { warm: number; hot: number } };
   compound?: string;
   compoundStyle?: { bg: string; text: string };
 }
 
-export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, compound, compoundStyle }: TireGridProps) {
+export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, pressureOptimal, brakeTempThresholds, compound, compoundStyle }: TireGridProps) {
   const units = useUnits();
   const greenPct = healthThresholds.green * 100;
   const yellowPct = healthThresholds.yellow * 100;
@@ -72,11 +52,24 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
     return "bg-emerald-500";
   };
 
-  const brakeColor = (t: number) => {
-    if (t > 700) return "text-red-400";
-    if (t > 450) return "text-orange-400";
-    if (t < 175) return "text-blue-400";
+  const brakeColor = (t: number, isRear: boolean) => {
+    const thresholds = brakeTempThresholds
+      ? { cold: brakeTempThresholds.cold, ...(isRear ? brakeTempThresholds.rear : brakeTempThresholds.front) }
+      : { cold: 175, warm: 450, hot: 700 };
+    if (t > thresholds.hot)  return "text-red-400";
+    if (t > thresholds.warm) return "text-orange-400";
+    if (t < thresholds.cold) return "text-blue-400";
     return "text-app-text-secondary";
+  };
+
+  const brakeBg = (t: number, isRear: boolean) => {
+    const thresholds = brakeTempThresholds
+      ? { cold: brakeTempThresholds.cold, ...(isRear ? brakeTempThresholds.rear : brakeTempThresholds.front) }
+      : { cold: 175, warm: 450, hot: 700 };
+    if (t > thresholds.hot)  return "bg-red-500";
+    if (t > thresholds.warm) return "bg-orange-400";
+    if (t < thresholds.cold) return "bg-blue-400";
+    return "bg-slate-500";
   };
 
   return (
@@ -97,15 +90,14 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           {wheels.map((w) => {
             const h = Math.max(0, (1 - w.wear) * 100);
-            const hBarColor = h > greenPct ? "bg-emerald-400" : h > yellowPct ? "bg-yellow-400" : "bg-red-500";
             const hTextColor = h > greenPct ? "text-emerald-400" : h > yellowPct ? "text-yellow-400" : "text-red-400";
             const tempDisplay = units.tempUnit === "F"
               ? Math.round(w.tempC * 9 / 5 + 32)
               : Math.round(w.tempC);
 
             const isLeft = w.label.endsWith("L");
-
             const isRight = !isLeft;
+            const isRear = w.label.startsWith("R");
 
             return (
               <div key={w.label} className={`flex items-center gap-2 ${isRight ? "flex-row-reverse" : ""}`}>
@@ -114,29 +106,45 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
                   <div className={`text-xl font-mono font-bold tabular-nums leading-none ${tempColor(w.tempC)}`}>
                     {tempDisplay}{units.tempLabel}
                   </div>
-                  {hasPressure && w.pressure !== undefined && (
-                    <div className="mt-1 text-sm font-mono font-bold tabular-nums leading-none">
-                      <span className="text-app-text-muted">{w.pressure.toFixed(1)}psi</span>
-                    </div>
-                  )}
-                  <div className={`flex items-center gap-2 mt-1 ${isLeft ? "flex-row-reverse" : ""}`}>
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${hBarColor}`} style={{ width: `${h}%` }} />
-                    </div>
+                  <div className="mt-1">
                     <span className={`text-xs font-mono font-bold tabular-nums ${hTextColor}`}>{h.toFixed(0)}%</span>
                   </div>
+                  {hasPressure && w.pressure !== undefined && (
+                    <div className="mt-1 text-sm font-mono font-bold tabular-nums leading-none">
+                      <span className={
+                        pressureOptimal
+                          ? w.pressure < pressureOptimal.min ? "text-blue-400"
+                          : w.pressure > pressureOptimal.max ? "text-orange-400"
+                          : "text-emerald-400"
+                          : "text-app-text-muted"
+                      }>{w.pressure.toFixed(1)}psi</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Wheel bar */}
-                <div className={`w-4 h-12 rounded-sm shrink-0 ${tempBg(w.tempC)}`} />
+                {/* Wheel bar — fill height = health, color = temp */}
+                <div className="relative w-6 h-12 rounded-sm overflow-hidden bg-slate-700/50 shrink-0">
+                  <div className={`absolute bottom-0 left-0 right-0 ${tempBg(w.tempC)}`} style={{ height: `${h}%` }} />
+                </div>
 
                 {/* Brake group — center of car */}
                 {hasBrake && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <BrakePad tempC={w.brakeTemp ?? 0} padMm={w.brakePadMm} />
+                  <div className={`flex items-center gap-1 shrink-0 ${isRight ? "flex-row-reverse" : ""}`}>
+                    {(() => {
+                      const pct = w.brakePadMm !== undefined
+                        ? Math.max(0, Math.min(100, (w.brakePadMm / PAD_NEW_MM) * 100))
+                        : 100;
+                      const t = w.brakeTemp ?? 0;
+                      const barColor = brakeBg(t, isRear);
+                      return (
+                        <div className="relative w-2 h-12 overflow-hidden bg-slate-700/50 shrink-0">
+                          <div className={`absolute bottom-0 left-0 right-0 ${barColor}`} style={{ height: `${pct}%` }} />
+                        </div>
+                      );
+                    })()}
                     <div className="flex flex-col text-sm font-mono font-bold tabular-nums leading-none gap-1">
                       {w.brakeTemp !== undefined && (
-                        <span className={brakeColor(w.brakeTemp)}>B:{Math.round(w.brakeTemp)}&deg;C</span>
+                        <span className={brakeColor(w.brakeTemp, isRear)}>B:{Math.round(w.brakeTemp)}&deg;C</span>
                       )}
                       {w.brakePadMm !== undefined && (() => {
                         const pct = Math.max(0, Math.min(100, (w.brakePadMm / PAD_NEW_MM) * 100));

@@ -35,7 +35,9 @@ export function AccLiveDashboard() {
             rl={{ tempC: packet.TireTempRL, wear: packet.TireWearRL, brakeTemp: packet.BrakeTempRearLeft ?? 0, brakePadMm: packet.acc?.brakePadWear[2], pressure: packet.TirePressureRearLeft ?? 0 }}
             rr={{ tempC: packet.TireTempRR, wear: packet.TireWearRR, brakeTemp: packet.BrakeTempRearRight ?? 0, brakePadMm: packet.acc?.brakePadWear[3], pressure: packet.TirePressureRearRight ?? 0 }}
             healthThresholds={tryGetGame("acc")?.tireHealthThresholds ?? { green: 0.85, yellow: 0.70 }}
-            tempThresholds={{ blue: 60, orange: 85, red: 100 }}
+            tempThresholds={{ blue: 70, orange: 100, red: 110 }}
+            pressureOptimal={tryGetGame("acc")?.tirePressureOptimal}
+            brakeTempThresholds={tryGetGame("acc")?.brakeTempThresholds}
             compound={packet.acc?.tireCompound}
           />
         </div>

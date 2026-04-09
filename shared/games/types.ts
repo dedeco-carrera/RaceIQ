@@ -39,6 +39,16 @@ export interface GameAdapter {
   /** Tire temp thresholds in °C — blue < cold < green < warm < amber < hot < red */
   tireTempThresholds: { cold: number; warm: number; hot: number };
 
+  /** Optimal tire pressure range in PSI — shown green when in range, blue below, orange above */
+  tirePressureOptimal?: { min: number; max: number };
+
+  /** Brake temp thresholds in °C — front/rear have different working ranges */
+  brakeTempThresholds?: {
+    cold: number;
+    front: { warm: number; hot: number };
+    rear: { warm: number; hot: number };
+  };
+
   /** Car class names (e.g. Forza: D/C/B/A/S/R/P/X) — undefined if N/A */
   carClassNames?: Record<number, string>;
 
