@@ -325,6 +325,27 @@ export class SectorTracker {
   getLapDistStart(): number {
     return this.lapDistStart;
   }
+
+  getDebugState(): Record<string, unknown> {
+    return {
+      bounds: this.bounds,
+      lapDistStart: this.lapDistStart,
+      lapDistTotal: this.lapDistTotal,
+      currentSector: this.currentSector,
+      sectorStartTime: this.sectorStartTime,
+      currentTimes: this.currentTimes,
+      bestTimes: this.bestTimes,
+      lastTimes: this.lastTimes,
+      lastLap: this.lastLap,
+      bestLapTime: this.bestLapTime,
+      lastLapTime: this.lastLapTime,
+      initialized: this.initialized,
+      prevCurrentLap: this.prevCurrentLap,
+      refLap: this.refLap,
+      currentTrackOrdinal: this.currentTrackOrdinal,
+      currentCarOrdinal: this.currentCarOrdinal,
+    };
+  }
 }
 
 /**
@@ -760,5 +781,23 @@ export class PitTracker {
   /** Expose reference wear curve for testing. */
   _getRefWearCurve(): ResampledWearCurve | null {
     return this.refWearCurve;
+  }
+
+  getDebugState(): Record<string, unknown> {
+    return {
+      fuelHistory: this.fuelHistory,
+      fuelAtLapStart: this.fuelAtLapStart,
+      lastLap: this.lastLap,
+      tireWearHistory: this.tireWearHistory,
+      wearAtLapStart: this.wearAtLapStart,
+      recentWearCurvesLength: this.recentWearCurves.length,
+      refWearCurve: this.refWearCurve,
+      liveWearAtLapStart: this.liveWearAtLapStart,
+      lapTimeHistory: this.lapTimeHistory,
+      lastCurrentLap: this.lastCurrentLap,
+      sessionLapCount: this.sessionLapCount,
+      badHealthThreshold: this.badHealthThreshold,
+      criticalHealth: this.criticalHealth,
+    };
   }
 }
