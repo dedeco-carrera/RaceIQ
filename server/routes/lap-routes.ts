@@ -17,6 +17,9 @@ import {
   saveAnalysis,
 } from "../db/queries";
 import { assessLapRecording } from "../lap-quality";
+
+// Toggle: set true to use native ACC lastSectorTime transitions in recheck instead of distance-fraction
+const USE_NATIVE_ACC_SECTORS = false;
 import { getTuneById as getDbTune } from "../db/tune-queries";
 import { generateExport } from "../export";
 import { compareLaps } from "../comparison";
@@ -456,22 +459,43 @@ export const lapRoutes = new Hono()
         const lapDist = packets[packets.length - 1].DistanceTraveled - startDist;
         if (lapDist >= 100) {
           const gameId = lap.gameId as GameId | undefined;
-          const dbSectors = gameId ? await getTrackOutlineSectors(lap.trackOrdinal!, gameId) : null;
-          const raw = dbSectors ?? getTrackSectorsByOrdinal(lap.trackOrdinal!);
-          const s1End = raw?.s1End ?? 1 / 3;
-          const s2End = raw?.s2End ?? 2 / 3;
+          let s1 = 0, s2 = 0;
 
-          let sector = 0, sectorStart = packets[0].CurrentLap, s1 = 0, s2 = 0;
-          for (const p of packets) {
-            const frac = (p.DistanceTraveled - startDist) / lapDist;
-            const expected = frac < s1End ? 0 : frac < s2End ? 1 : 2;
-            if (expected > sector) {
-              const t = p.CurrentLap - sectorStart;
-              if (sector === 0) s1 = t; else if (sector === 1) s2 = t;
-              sectorStart = p.CurrentLap;
-              sector = expected;
+          if (USE_NATIVE_ACC_SECTORS && gameId === "acc") {
+            // Replay native sector transitions from stored packets (mirrors live tracker)
+            let prevIdx = packets[0].acc?.currentSectorIndex ?? 0;
+            for (const p of packets) {
+              if (!p.acc) continue;
+              const idx = p.acc.currentSectorIndex;
+              const t = p.acc.lastSectorTime / 1000;
+              if (idx !== prevIdx && t > 0) {
+                if (prevIdx === 0) s1 = t;
+                else if (prevIdx === 1) s2 = t;
+                prevIdx = idx;
+              }
             }
           }
+
+          if (s1 === 0 || s2 === 0) {
+            const dbSectors = gameId ? await getTrackOutlineSectors(lap.trackOrdinal!, gameId) : null;
+            const raw = dbSectors ?? getTrackSectorsByOrdinal(lap.trackOrdinal!);
+            const s1End = raw?.s1End ?? 1 / 3;
+            const s2End = raw?.s2End ?? 2 / 3;
+
+            let sector = 0, sectorStart = packets[0].CurrentLap;
+            s1 = 0; s2 = 0;
+            for (const p of packets) {
+              const frac = (p.DistanceTraveled - startDist) / lapDist;
+              const expected = frac < s1End ? 0 : frac < s2End ? 1 : 2;
+              if (expected > sector) {
+                const t = p.CurrentLap - sectorStart;
+                if (sector === 0) s1 = t; else if (sector === 1) s2 = t;
+                sectorStart = p.CurrentLap;
+                sector = expected;
+              }
+            }
+          }
+
           if (s1 > 0 && s2 > 0) {
             const s3 = lap.lapTime - s1 - s2;
             if (s3 > 0) sectors = { s1, s2, s3 };

@@ -28,9 +28,12 @@ export function assessLapRecording(
     return { valid: false, reason: "telemetry distance too short" };
   }
 
-  // Lap time in telemetry should roughly match stored lapTime (within 2s)
-  const telemetryLapTime = packets[packets.length - 1].CurrentLap;
-  if (telemetryLapTime > 0 && Math.abs(telemetryLapTime - lapTime) > 2) {
+  // Lap time in telemetry should roughly match stored lapTime (within 2s).
+  // Use peak CurrentLap across the buffer rather than the last packet — in ACC,
+  // iCurrentTime can reset to ~0 and start counting the new lap before completedLaps
+  // increments, so the last few packets may show the new lap's elapsed time instead.
+  const peakTelemetryLapTime = Math.max(...packets.map((p) => p.CurrentLap));
+  if (peakTelemetryLapTime > 0 && Math.abs(peakTelemetryLapTime - lapTime) > 2) {
     return { valid: false, reason: "telemetry lap time mismatch" };
   }
 

@@ -292,6 +292,21 @@ class LapDetector {
     // Use LastLap from the first packet of the new lap as authoritative lap time
     const lapTime = newLapFirstPacket.LastLap;
 
+    // ACC: iCurrentTime can reset and start counting the new lap before completedLaps
+    // increments, so the tail of the buffer may contain packets with a reset CurrentLap.
+    // Split at the peak CurrentLap — everything after is overflow for the next lap.
+    let overflowPackets: TelemetryPacket[] = [];
+    if (newLapFirstPacket.gameId === "acc") {
+      let peakIdx = 0;
+      for (let i = 1; i < this.lapBuffer.length; i++) {
+        if (this.lapBuffer[i].CurrentLap >= this.lapBuffer[peakIdx].CurrentLap) peakIdx = i;
+      }
+      if (peakIdx < this.lapBuffer.length - 1) {
+        overflowPackets = this.lapBuffer.slice(peakIdx + 1);
+        this.lapBuffer = this.lapBuffer.slice(0, peakIdx + 1);
+      }
+    }
+
     // Running-start trim: strip pre-start-line packets
     this.trimRunningStartPackets();
 
@@ -365,7 +380,7 @@ class LapDetector {
       }
     }
 
-    this.resetLapState(newLapFirstPacket);
+    this.resetLapState(newLapFirstPacket, overflowPackets);
   }
 
   /** Best-effort save of an incomplete lap when the session ends mid-lap. */
@@ -548,9 +563,9 @@ class LapDetector {
     return null;
   }
 
-  private resetLapState(newLapFirstPacket: TelemetryPacket): void {
+  private resetLapState(newLapFirstPacket: TelemetryPacket, seedPackets: TelemetryPacket[] = []): void {
     this.currentLapNumber = newLapFirstPacket.LapNumber;
-    this.lapBuffer = [];
+    this.lapBuffer = [...seedPackets];
     this.lapIsValid = true;
     this.invalidReason = null;
     this.lastLastLap = newLapFirstPacket.LastLap;
