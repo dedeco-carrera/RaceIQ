@@ -52,7 +52,7 @@ describe("SectorTracker estimated lap & delta", () => {
 
     // Set reference: uniform 90s lap over 5000m
     const refPackets = makeRefPackets(5000, 90, 200);
-    tracker.updateRefLap(refPackets, 0, 90);
+    tracker.updateRefLap(refPackets, 90);
 
     // Initialize tracker with first packet of a new lap
     tracker.feed(pkt({ DistanceTraveled: 10000, CurrentLap: 0, LapNumber: 2 }));
@@ -70,7 +70,7 @@ describe("SectorTracker estimated lap & delta", () => {
     tracker._initForTest({ s1End: 0.33, s2End: 0.66, trackLength: 5000 });
 
     const refPackets = makeRefPackets(5000, 90, 200);
-    tracker.updateRefLap(refPackets, 0, 90);
+    tracker.updateRefLap(refPackets, 90);
 
     tracker.feed(pkt({ DistanceTraveled: 0, CurrentLap: 0, LapNumber: 1 }));
 
@@ -85,7 +85,7 @@ describe("SectorTracker estimated lap & delta", () => {
     tracker._initForTest({ s1End: 0.33, s2End: 0.66, trackLength: 5000 });
 
     const refPackets = makeRefPackets(5000, 90, 200);
-    tracker.updateRefLap(refPackets, 0, 90);
+    tracker.updateRefLap(refPackets, 90);
 
     tracker.feed(pkt({ DistanceTraveled: 0, CurrentLap: 0, LapNumber: 1 }));
 
@@ -100,7 +100,7 @@ describe("SectorTracker estimated lap & delta", () => {
     tracker._initForTest({ s1End: 0.33, s2End: 0.66, trackLength: 5000 });
 
     const refPackets = makeRefPackets(5000, 90, 200);
-    tracker.updateRefLap(refPackets, 0, 90);
+    tracker.updateRefLap(refPackets, 90);
 
     tracker.feed(pkt({ DistanceTraveled: 0, CurrentLap: 0, LapNumber: 1 }));
 
@@ -117,8 +117,8 @@ describe("SectorTracker estimated lap & delta", () => {
     const fast = makeRefPackets(5000, 85, 200);
     const slow = makeRefPackets(5000, 95, 200);
 
-    tracker.updateRefLap(fast, 0, 85);
-    tracker.updateRefLap(slow, 0, 95); // should NOT replace
+    tracker.updateRefLap(fast, 85);
+    tracker.updateRefLap(slow, 95); // should NOT replace
 
     tracker.feed(pkt({ DistanceTraveled: 0, CurrentLap: 0, LapNumber: 1 }));
 
@@ -133,7 +133,7 @@ describe("SectorTracker estimated lap & delta", () => {
     tracker._initForTest({ s1End: 0.33, s2End: 0.66, trackLength: 5000 });
 
     const ref = makeRefPackets(5000, 88, 200);
-    tracker.updateRefLap(ref, 0, 88);
+    tracker.updateRefLap(ref, 88);
 
     tracker.feed(pkt({ DistanceTraveled: 0, CurrentLap: 0, LapNumber: 1 }));
     const r = tracker.feed(pkt({ DistanceTraveled: 100, CurrentLap: 1, LapNumber: 1 }));
@@ -146,7 +146,7 @@ describe("SectorTracker estimated lap & delta", () => {
 
     // Reference lap recorded starting from dist 5000
     const refPackets = makeRefPackets(5000, 90, 200, 5000);
-    tracker.updateRefLap(refPackets, 5000, 90);
+    tracker.updateRefLap(refPackets, 90);
 
     // Live lap starts at dist 15000 (lap 3 of session)
     tracker.feed(pkt({ DistanceTraveled: 15000, CurrentLap: 0, LapNumber: 3 }));
@@ -173,7 +173,7 @@ describe("SectorTracker estimated lap & delta", () => {
         : 60 + ((dist - 500) / 500) * 30;
       refPackets.push(pkt({ DistanceTraveled: dist, CurrentLap: time }));
     }
-    tracker.updateRefLap(refPackets, 0, 90);
+    tracker.updateRefLap(refPackets, 90);
 
     tracker.feed(pkt({ DistanceTraveled: 0, CurrentLap: 0, LapNumber: 1 }));
 

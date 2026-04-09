@@ -158,11 +158,11 @@ export class SectorTracker {
 
           if (lapMeta.lapTime < this.bestLapTime) {
             this.bestLapTime = lapMeta.lapTime;
-            // For ACC (no track centerlines), seed refLap from best historical lap
+            // For tracks without bounds (ACC), seed refLap from best historical lap
             // This enables EST/delta from session start, not just after first live lap.
-            // F1/Forza keep the original behavior (no refLap until first live lap).
+            // Tracks with bounds (F1/Forza) keep original behavior (no refLap until live).
             // Live laps will still update refLap if they're faster (via updateRefLap).
-            if (!this.refLap && gameId === "acc" && lap?.telemetry) {
+            if (!this.refLap && !this.bounds && lap?.telemetry) {
               this.refLap = this.buildRefLapFromPackets(lap.telemetry, lapMeta.lapTime);
             }
           }
@@ -312,7 +312,7 @@ export class SectorTracker {
   }
 
   /** Update reference lap and bests from a just-completed valid live lap. */
-  updateRefLap(packets: TelemetryPacket[], lapDistStart: number, lapTime: number, sectors?: { s1: number; s2: number; s3: number } | null): void {
+  updateRefLap(packets: TelemetryPacket[], lapTime: number, sectors?: { s1: number; s2: number; s3: number } | null): void {
     if (lapTime < this.bestLapTime) this.bestLapTime = lapTime;
     if (sectors) {
       if (sectors.s1 > 0 && sectors.s1 < this.bestTimes[0]) this.bestTimes[0] = sectors.s1;
