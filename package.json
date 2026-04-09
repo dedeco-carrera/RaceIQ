@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
     "dev:server": "bun --watch run server/index.ts",
+    "dev:record": "bun run server/record.ts",
     "dev:client": "cd client && portless raceiq bun run dev",
     "build": "mkdir -p dist && rm -rf dist/* && cd client && bun vite build && cd .. && bun scripts/copy-shared-data.ts && cp -r client/dist dist/public && NODE_ENV=production bun build --compile server/bootstrap.ts --outfile dist/raceiq",
     "start": "NODE_ENV=production ./dist/raceiq",
