@@ -12,11 +12,9 @@ interface LapTimesProps {
  */
 export function LapTimes({ packet, sectors }: LapTimesProps) {
   // Use sectors delta if available (estimated lap), fallback to packet delta
-  let delta = 0;
   let deltaToBest = sectors?.deltaToBest ?? 0;
   if (packet.LastLap > 0 && packet.BestLap > 0 && deltaToBest === 0) {
-    delta = packet.LastLap - packet.BestLap;
-    deltaToBest = delta;
+    deltaToBest = packet.LastLap - packet.BestLap;
   }
 
   const deltaColor = deltaToBest <= 0 ? "text-emerald-400" : deltaToBest < 1 ? "text-orange-400" : "text-red-400";
@@ -30,22 +28,18 @@ export function LapTimes({ packet, sectors }: LapTimesProps) {
             {formatLapTime(packet.CurrentLap)}
           </div>
         </div>
-        {sectors?.estimatedLap ? (
-          <div className="w-fit">
-            <div className="text-[10px] text-app-text-muted uppercase tracking-wider">Est. Lap</div>
-            <div className="text-3xl font-mono font-bold text-app-text tabular-nums leading-none">
-              {formatLapTime(sectors.estimatedLap)}
-            </div>
+        <div className="w-fit">
+          <div className="text-[10px] text-app-text-muted uppercase tracking-wider">Est. Lap</div>
+          <div className="text-3xl font-mono font-bold text-app-text tabular-nums leading-none">
+            {formatLapTime(sectors?.estimatedLap ?? 0)}
           </div>
-        ) : null}
-        {deltaToBest !== 0 || (packet.LastLap > 0 && packet.BestLap > 0) ? (
-          <div className="w-fit">
-            <div className="text-[10px] text-app-text-muted uppercase tracking-wider">Delta</div>
-            <div className={`text-3xl font-mono font-bold tabular-nums leading-none ${deltaColor}`}>
-              {deltaToBest <= 0 ? "" : "+"}{deltaToBest.toFixed(3)}
-            </div>
+        </div>
+        <div className="w-fit">
+          <div className="text-[10px] text-app-text-muted uppercase tracking-wider">Delta</div>
+          <div className={`text-3xl font-mono font-bold tabular-nums leading-none ${deltaToBest === 0 ? "text-app-text-dim" : deltaColor}`}>
+            {deltaToBest === 0 ? "--:--.---" : `${deltaToBest <= 0 ? "" : "+"}${deltaToBest.toFixed(3)}`}
           </div>
-        ) : null}
+        </div>
       </div>
       <div className="flex gap-3">
         <div className="w-fit">

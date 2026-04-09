@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTelemetryStore } from "../../stores/telemetry";
 import type { TelemetryPacket, F1ExtendedData } from "@shared/types";
+import { tryGetGame } from "@shared/games/registry";
 import { LapTimeChart } from "../LapTimeChart";
 import { SectorTimes } from "../SectorTimes";
 import { LapTimes } from "../telemetry/LapTimes";
@@ -90,6 +91,8 @@ export function F1LiveDashboard() {
                 </div>
               </div>
               <LapTimes packet={rawPacket!} sectors={sectors} />
+              <div className="mt-3" />
+              <SectorTimes />
             </div>
           </div>
           <div>
@@ -125,16 +128,8 @@ export function F1LiveDashboard() {
         <GridSection f1={f1} playerPosition={rawPacket!.RacePosition} />
       </div>
 
-      {/* Right column: Sectors + Charts + Recorded Laps */}
+      {/* Right column: Charts + Recorded Laps */}
       <div className="overflow-auto flex flex-col">
-        <div className="border-b border-app-border">
-          <div className="p-2 border-b border-app-border">
-            <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Sectors</h2>
-          </div>
-          <div className="p-3">
-            <SectorTimes />
-          </div>
-        </div>
         <LapTimeChart packet={rawPacket!} />
         <div className="flex-1">
           <RecordedLaps showSessionType />
@@ -179,6 +174,9 @@ function TireTempDiagram({ packet }: { packet: TelemetryPacket }) {
   const f1 = packet.f1;
   const compound = f1?.tyreCompound || "unknown";
   const compoundColors = COMPOUND_COLORS[compound] ?? COMPOUND_COLORS.unknown;
+  const thresh = tryGetGame("f1-2025")?.tireHealthThresholds ?? { green: 0.70, yellow: 0.50 };
+  const greenPct = thresh.green * 100;
+  const yellowPct = thresh.yellow * 100;
   const tires = [
     { label: "FL", temp: Math.round(fToC(packet.TireTempFL)), wear: packet.TireWearFL, brakeTemp: f1?.brakeTempFL ?? 0, pressure: f1?.tyrePressureFL ?? 0 },
     { label: "FR", temp: Math.round(fToC(packet.TireTempFR)), wear: packet.TireWearFR, brakeTemp: f1?.brakeTempFR ?? 0, pressure: f1?.tyrePressureFR ?? 0 },
@@ -213,14 +211,14 @@ function TireTempDiagram({ packet }: { packet: TelemetryPacket }) {
   return (
     <div>
       <div className="p-2 border-b border-app-border flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-app-text-muted uppercase tracking-wider">Tires</h2>
+        <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Tires</h2>
         <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${compoundColors.bg} ${compoundColors.text}`}>{compound}</span>
       </div>
       <div className="p-3 flex flex-col justify-center h-full">
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           {tires.map((t) => {
             const h = health(t.wear);
-            const hColor = h > 60 ? "bg-emerald-400" : h > 30 ? "bg-yellow-400" : "bg-red-500";
+            const hColor = h > greenPct ? "bg-emerald-400" : h > yellowPct ? "bg-yellow-400" : "bg-red-500";
             return (
               <div key={t.label} className="flex items-center gap-3">
                 <div className={`w-4 h-12 rounded-sm ${tempBg(t.temp)}`} />
@@ -264,7 +262,7 @@ function CarDamageSection({ f1 }: { f1: F1ExtendedData }) {
   return (
     <div className="border-b border-app-border">
       <div className="p-2 border-b border-app-border flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-app-text-muted uppercase tracking-wider">Damage</h2>
+        <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Damage</h2>
         {!hasDamage && <span className="text-xs text-emerald-400">All Clear</span>}
       </div>
       <div className="p-3 flex items-center gap-4">
@@ -430,7 +428,7 @@ function GridSection({ f1, playerPosition }: { f1: F1ExtendedData; playerPositio
   return (
     <div className="flex flex-col flex-1">
       <div className="p-2 border-b border-app-border flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-app-text-muted uppercase tracking-wider">Live Standings</h2>
+        <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Live Standings</h2>
         <button
           onClick={() => setExpanded(!expanded)}
           className="text-xs text-app-accent hover:text-app-accent/80 font-semibold"

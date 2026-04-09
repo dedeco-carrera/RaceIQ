@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { TelemetryPacket } from "@shared/types";
 import type { DisplayPacket } from "@/lib/convert-packet";
 import { useUnits } from "@/hooks/useUnits";
-import { useSettings } from "@/hooks/queries";
+import { useGameId } from "@/stores/game";
+import { tryGetGame } from "@shared/games/registry";
 import { tireHealthTextClass, tireTempClass, tireTempBgClass } from "@/lib/vehicle-dynamics";
 
 /**
@@ -11,8 +12,12 @@ import { tireHealthTextClass, tireTempClass, tireTempBgClass } from "@/lib/vehic
  */
 export function TireRaceView({ packet }: { packet: DisplayPacket | TelemetryPacket }) {
   const units = useUnits();
-  const { displaySettings } = useSettings();
-  const healthThresh = displaySettings.tireHealthThresholds.values;
+  const gameId = useGameId();
+  const adapterThresh = (gameId ? tryGetGame(gameId) : null)?.tireHealthThresholds ?? { green: 0.70, yellow: 0.40 };
+  // Derive 4-stop threshold array from adapter: dead → cliff → mid → green
+  const y = adapterThresh.yellow * 100;
+  const g = adapterThresh.green * 100;
+  const healthThresh = [y / 2, y, (y + g) / 2, g];
   const [wearInit] = useState(() => ({
     lastLap: 0,
     wearAtLapStart: [packet.TireWearFL, packet.TireWearFR, packet.TireWearRL, packet.TireWearRR],

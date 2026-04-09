@@ -1,7 +1,7 @@
 import { useTelemetryStore } from "../stores/telemetry";
 import { Link } from "@tanstack/react-router";
 import { useTrackName, useCarName } from "../hooks/queries";
-import { useGameRoute } from "../stores/game";
+import { useGameId, useGameRoute } from "../stores/game";
 import { LiveTelemetry, type DashboardMode } from "./LiveTelemetry";
 import { LiveTrackMap } from "./LiveTrackMap";
 import { RecordedLaps } from "./RecordedLaps";
@@ -16,6 +16,10 @@ function PageHeader({ dashMode, demo }: {
   demo: ReturnType<typeof useDemoMode>;
 }) {
   const prefix = useGameRoute();
+  const gameId = useGameId();
+
+  if (gameId === "acc") return null;
+
   return (
     <div className="p-2 border-b border-app-border flex items-center justify-between">
       <div className="flex items-center gap-1 rounded p-0.5">
@@ -65,7 +69,7 @@ function PageHeader({ dashMode, demo }: {
   );
 }
 
-function RaceInfo({ packet, trackName, carName, showTrackMap = true, showSectors = true }: {
+export function RaceInfo({ packet, trackName, carName, showTrackMap = true, showSectors = true }: {
   packet: NonNullable<ReturnType<typeof useTelemetryStore.getState>["packet"]>;
   trackName: string | undefined;
   carName: string | undefined;
@@ -144,23 +148,15 @@ export function LivePage({ mode = "driver" }: { mode?: DashboardMode }) {
   if (mode === "driver") {
     return (
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 h-full">
-        {/* Left column: Race + Tire Health + Pit Window */}
+        {/* Left column: Tire Health + Pit Window */}
         <div className="border-r border-app-border overflow-auto">
           <PageHeader dashMode={mode} demo={demo} />
-          <RaceInfo packet={packet} trackName={trackName} carName={carName} showTrackMap={false} showSectors={false} />
           <LiveTelemetry packet={packet} mode={mode} />
         </div>
 
-        {/* Right column: Sectors + Lap Times + Recorded Laps */}
+        {/* Right column: Race (with sectors) + Lap Chart + Recorded Laps */}
         <div className="overflow-y-auto overflow-x-hidden flex flex-col">
-          <div className="border-b border-app-border">
-            <div className="p-2 border-b border-app-border">
-              <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Sectors</h2>
-            </div>
-            <div className="p-3">
-              <SectorTimes />
-            </div>
-          </div>
+          <RaceInfo packet={packet} trackName={trackName} carName={carName} showTrackMap={true} showSectors={true} />
           <LapTimeChart packet={packet} />
           <div className="flex-1">
             <RecordedLaps />
@@ -184,9 +180,6 @@ export function LivePage({ mode = "driver" }: { mode?: DashboardMode }) {
         <RaceInfo packet={packet} trackName={trackName} carName={carName} showTrackMap={true} showSectors={true} />
         <LapTimeChart packet={packet} />
         <div className="flex-1">
-          <div className="p-2 border-b border-app-border">
-            <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Recorded Laps</h2>
-          </div>
           <RecordedLaps />
         </div>
       </div>

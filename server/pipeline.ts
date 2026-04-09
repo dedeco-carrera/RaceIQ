@@ -11,11 +11,11 @@ import { getLaps } from "./db/queries";
 const sectorTracker = new SectorTracker();
 const pitTracker = new PitTracker();
 
-/** Push the current session's recorded laps (filtered by track+car) to all WS clients. */
-async function broadcastSessionLaps(trackOrdinal: number, carOrdinal: number, gameId: GameId): Promise<void> {
+/** Push the current session's recorded laps (filtered by session) to all WS clients. */
+async function broadcastSessionLaps(sessionId: number, trackOrdinal: number, carOrdinal: number, gameId: GameId): Promise<void> {
   try {
     const allLaps = await getLaps(gameId, 200);
-    const laps = allLaps.filter((l) => l.trackOrdinal === trackOrdinal && l.carOrdinal === carOrdinal);
+    const laps = allLaps.filter((l) => l.sessionId === sessionId && l.trackOrdinal === trackOrdinal && l.carOrdinal === carOrdinal);
     wsManager.broadcastNotification({ type: "session-laps", laps });
   } catch {}
 }
@@ -28,7 +28,7 @@ lapDetector.onSessionStart = async (session) => {
   // Seed fuel from history (same engine regardless of compound).
   // Tire wear is NOT seeded — compound-dependent, starts fresh each session.
   await pitTracker.seedFromHistory(session.trackOrdinal, session.carOrdinal, session.carPI, session.gameId);
-  await broadcastSessionLaps(session.trackOrdinal, session.carOrdinal, session.gameId);
+  await broadcastSessionLaps(session.sessionId, session.trackOrdinal, session.carOrdinal, session.gameId);
 };
 
 lapDetector.onLapComplete_ = (event) => {
@@ -46,7 +46,7 @@ lapDetector.onLapSaved = (event) => {
   wsManager.broadcastNotification({ type: "lap-saved", ...event });
   // Re-push updated lap list after save completes
   const session = lapDetector.session;
-  if (session) broadcastSessionLaps(session.trackOrdinal, session.carOrdinal, session.gameId);
+  if (session) broadcastSessionLaps(session.sessionId, session.trackOrdinal, session.carOrdinal, session.gameId);
 };
 
 let _totalProcessed = 0;
