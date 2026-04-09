@@ -18,6 +18,11 @@ import { loadSettings } from "./settings";
 import { UdpRecorder } from "./udp-recorder";
 import { writeRecordingMeta, type RecordingMeta } from "./record-meta";
 import { resolve } from "path";
+import { accRecorder } from "./games/acc/recorder";
+import { PHYSICS, GRAPHICS, STATIC, AC_STATUS } from "./games/acc/structs";
+import { readWString, toWideString } from "./games/acc/utils";
+import { getAccCarByModel } from "../shared/acc-car-data";
+import { getAccTrackByName } from "../shared/acc-track-data";
 
 // Register all game adapters (needed for canHandle + parsing)
 initGameAdapters();
@@ -143,9 +148,131 @@ async function recordUdp(
   process.on("SIGTERM", shutdown);
 }
 
-// ─── ACC recording (stub — implemented in Task 5) ────────────────────────────
+// ─── ACC recording ────────────────────────────────────────────────────────────
 
-async function recordAcc(_sessionDir: string, _meta: RecordingMeta): Promise<never> {
-  console.error("[Record] ACC recording not yet implemented");
-  process.exit(1);
+async function recordAcc(sessionDir: string, meta: RecordingMeta): Promise<void> {
+  const FILE_MAP_READ = 0x0004;
+
+  // Load kernel32.dll FFI — same calls as AccSharedMemoryReader._loadFfi()
+  const { dlopen, FFIType, ptr } = require("bun:ffi") as typeof import("bun:ffi");
+  type Kernel32 = {
+    symbols: {
+      OpenFileMappingW(access: number, inherit: boolean, name: unknown): unknown;
+      MapViewOfFile(handle: unknown, access: number, offHigh: number, offLow: number, size: number): unknown;
+      UnmapViewOfFile(view: unknown): boolean;
+      CloseHandle(handle: unknown): boolean;
+      RtlCopyMemory(dest: unknown, src: unknown, length: number): void;
+    };
+  };
+  let kernel32: Kernel32;
+  try {
+    kernel32 = dlopen("kernel32.dll", {
+      OpenFileMappingW: { args: [FFIType.u32, FFIType.bool, FFIType.ptr], returns: FFIType.ptr },
+      MapViewOfFile: { args: [FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32], returns: FFIType.ptr },
+      UnmapViewOfFile: { args: [FFIType.ptr], returns: FFIType.bool },
+      CloseHandle: { args: [FFIType.ptr], returns: FFIType.bool },
+      RtlCopyMemory: { args: [FFIType.ptr, FFIType.ptr, FFIType.u32], returns: FFIType.void },
+    }) as Kernel32;
+  } catch (err) {
+    console.error("[Record] Failed to load kernel32.dll — ACC recording requires Windows:", err);
+    process.exit(1);
+  }
+
+  const ffiPtr = ptr as (buf: Buffer) => unknown;
+
+  type MappedFile = { handle: number; view: number; size: number };
+
+  function openMem(name: string, size: number): MappedFile | null {
+    const wideName = toWideString(name);
+    const handle = kernel32.symbols.OpenFileMappingW(FILE_MAP_READ, false, ffiPtr(wideName));
+    if (!handle || handle === 0) return null;
+    const view = kernel32.symbols.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, 0);
+    if (!view || view === 0) { kernel32.symbols.CloseHandle(handle); return null; }
+    return { handle: Number(handle), view: Number(view), size };
+  }
+
+  function closeMem(mapped: MappedFile): void {
+    kernel32.symbols.UnmapViewOfFile(mapped.view);
+    kernel32.symbols.CloseHandle(mapped.handle);
+  }
+
+  function readMem(mapped: MappedFile): Buffer {
+    const dest = Buffer.alloc(mapped.size);
+    kernel32.symbols.RtlCopyMemory(ffiPtr(dest), mapped.view, mapped.size);
+    return dest;
+  }
+
+  // Wait for ACC to be reachable
+  console.log("[Record] Waiting for ACC shared memory...");
+  let physics: MappedFile | null = null;
+  let graphics: MappedFile | null = null;
+  let staticMem: MappedFile | null = null;
+
+  await new Promise<void>((resolveConn) => {
+    const tryConnect = setInterval(() => {
+      physics = openMem("Local\\acpmf_physics", PHYSICS.SIZE);
+      graphics = openMem("Local\\acpmf_graphics", GRAPHICS.SIZE);
+      staticMem = openMem("Local\\acpmf_static", STATIC.SIZE);
+      if (physics && graphics && staticMem) {
+        clearInterval(tryConnect);
+        resolveConn();
+      } else {
+        if (physics) closeMem(physics);
+        if (graphics) closeMem(graphics);
+        if (staticMem) closeMem(staticMem);
+        physics = null; graphics = null; staticMem = null;
+      }
+    }, 2000);
+  });
+
+  console.log("[Record] ACC shared memory connected");
+
+  // Resolve track/car from static buffer
+  const staticBuf = readMem(staticMem!);
+  const carModel = readWString(staticBuf, STATIC.carModel.offset, (STATIC.carModel as { offset: number; size: number }).size);
+  const trackStr = readWString(staticBuf, STATIC.track.offset, (STATIC.track as { offset: number; size: number }).size);
+  const car = getAccCarByModel(carModel);
+  const track = getAccTrackByName(trackStr);
+  if (car) { meta.carOrdinal = car.id; meta.carName = carModel; }
+  if (track) { meta.trackOrdinal = track.id; meta.trackName = trackStr; }
+  writeRecordingMeta(sessionDir, meta);
+  console.log(`[Record] Resolved: track=${meta.trackName ?? "unknown"} car=${meta.carName ?? "unknown"}`);
+
+  // Start recording using existing AccRecorder (writes to data/acc-recordings/)
+  const accDir = resolve(process.cwd(), "data", "acc-recordings");
+  accRecorder.start(accDir);
+  console.log(`[Record] ACC recording started`);
+  console.log(`[Record] Meta written to ${sessionDir}`);
+  console.log(`[Record] Press Ctrl+C to stop`);
+
+  // Poll at 60Hz — write raw frames, no pipeline
+  const pollTimer = setInterval(() => {
+    if (!physics || !graphics || !staticMem) return;
+    try {
+      const physicsBuf = readMem(physics);
+      const graphicsBuf = readMem(graphics);
+      const graphicsStatus = graphicsBuf.readInt32LE(GRAPHICS.status.offset);
+      if (graphicsStatus !== AC_STATUS.AC_LIVE) return;
+      const staticBuf = readMem(staticMem);
+      accRecorder.writeFrame(physicsBuf, graphicsBuf, staticBuf);
+    } catch (err) {
+      console.error("[Record] Error reading shared memory:", err);
+    }
+  }, 1000 / 60);
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.log("\n[Record] Stopping...");
+    clearInterval(pollTimer);
+    if (physics) { closeMem(physics); physics = null; }
+    if (graphics) { closeMem(graphics); graphics = null; }
+    if (staticMem) { closeMem(staticMem); staticMem = null; }
+    await accRecorder.stop();
+    writeRecordingMeta(sessionDir, meta);
+    console.log(`[Record] Done. ${accRecorder.frameCount} frames recorded.`);
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
