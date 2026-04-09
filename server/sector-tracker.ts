@@ -6,7 +6,7 @@
  * client just renders numbers.
  */
 import type { TelemetryPacket, GameId, LiveSectorData, LivePitData, LapMeta } from "../shared/types";
-import { getTrackOutlineSectors, getLaps, getLapById } from "./db/queries";
+import { getTrackOutlineSectors, getLaps } from "./db/queries";
 import { getTrackSectorsByOrdinal, getTrackOutlineByOrdinal, loadSharedTrackMeta } from "../shared/track-data";
 import { tryGetGame } from "../shared/games/registry";
 
@@ -45,13 +45,6 @@ export class SectorTracker {
 
   /** Reset for a new session — loads sector boundaries and track length. */
   async reset(trackOrdinal: number, gameId: GameId, carOrdinal: number = -1): Promise<void> {
-    // Preserve reference lap and best times when staying on the same track+car
-    // (e.g. user restarted the race, rewind to start, new practice session)
-    const sameSetup = trackOrdinal === this.currentTrackOrdinal && carOrdinal === this.currentCarOrdinal;
-    const prevRefLap = sameSetup ? this.refLap : null;
-    const prevBestTimes = sameSetup ? [...this.bestTimes] as [number, number, number] : null;
-    const prevBestLapTime = sameSetup ? this.bestLapTime : Infinity;
-
     this.bounds = null;
     this.lapDistStart = 0;
     this.lapDistTotal = 0;
@@ -92,85 +85,7 @@ export class SectorTracker {
     this.bounds = { s1End: sectors.s1End, s2End: sectors.s2End, trackLength };
     if (trackLength > 0) this.lapDistTotal = trackLength;
 
-    // Seed best times from recorded laps on this track+car
-    await this.seedFromRecordedLaps(trackOrdinal, gameId, carOrdinal, sectors.s1End, sectors.s2End);
-
-    // Restore reference lap and best times from same-track session
-    if (prevRefLap) this.refLap = prevRefLap;
-    if (prevBestTimes) {
-      for (let i = 0; i < 3; i++) {
-        if (prevBestTimes[i] < this.bestTimes[i]) this.bestTimes[i] = prevBestTimes[i];
-      }
-    }
-    if (prevBestLapTime < this.bestLapTime) this.bestLapTime = prevBestLapTime;
-
     console.log(`[Sectors] Loaded for track ${trackOrdinal} (${gameId}): s1=${sectors.s1End}, s2=${sectors.s2End}, length=${trackLength.toFixed(0)}m, seeded best=${this.bestLapTime === Infinity ? "none" : this.bestLapTime.toFixed(3)}`);
-  }
-
-  /** Seed bestTimes and bestLapTime from previously recorded laps on this track+car. */
-  private async seedFromRecordedLaps(
-    trackOrdinal: number,
-    gameId: GameId,
-    carOrdinal: number,
-    s1End: number,
-    s2End: number
-  ): Promise<void> {
-    try {
-      const allLaps = await getLaps(gameId, 200);
-      const trackLaps = allLaps
-        .filter((l) => l.trackOrdinal === trackOrdinal && (carOrdinal < 0 || l.carOrdinal === carOrdinal) && l.isValid && l.lapTime > 10)
-        .sort((a, b) => a.lapTime - b.lapTime)
-        .slice(0, 10); // only check top 10 by lap time
-
-      for (const lapMeta of trackLaps) {
-        const lap = await getLapById(lapMeta.id);
-        if (!lap?.telemetry || lap.telemetry.length < 50) continue;
-
-        const packets = lap.telemetry;
-        const startDist = packets[0].DistanceTraveled;
-        const lapDistance = packets[packets.length - 1].DistanceTraveled - startDist;
-        if (lapDistance < 100) continue;
-
-        let currentSector = 0;
-        let sectorStartTime = packets[0].CurrentLap;
-        let s1Time = 0;
-        let s2Time = 0;
-
-        for (const p of packets) {
-          const frac = (p.DistanceTraveled - startDist) / lapDistance;
-          const expected = frac < s1End ? 0 : frac < s2End ? 1 : 2;
-          if (expected > currentSector) {
-            const t = p.CurrentLap - sectorStartTime;
-            if (currentSector === 0) s1Time = t;
-            else if (currentSector === 1) s2Time = t;
-            sectorStartTime = p.CurrentLap;
-            currentSector = expected;
-          }
-        }
-
-        if (s1Time > 0 && s2Time > 0) {
-          const s3Time = lapMeta.lapTime - s1Time - s2Time;
-          if (s3Time <= 0) continue;
-
-          if (s1Time < this.bestTimes[0]) this.bestTimes[0] = s1Time;
-          if (s2Time < this.bestTimes[1]) this.bestTimes[1] = s2Time;
-          if (s3Time < this.bestTimes[2]) this.bestTimes[2] = s3Time;
-
-          if (lapMeta.lapTime < this.bestLapTime) {
-            this.bestLapTime = lapMeta.lapTime;
-            // For tracks without bounds (ACC), seed refLap from best historical lap
-            // This enables EST/delta from session start, not just after first live lap.
-            // Tracks with bounds (F1/Forza) keep original behavior (no refLap until live).
-            // Live laps will still update refLap if they're faster (via updateRefLap).
-            if (!this.refLap && !this.bounds && lap?.telemetry) {
-              this.refLap = this.buildRefLapFromPackets(lap.telemetry, lapMeta.lapTime);
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("[Sectors] Failed to seed from recorded laps:", err);
-    }
   }
 
   /** Process a packet. Returns sector data or null if no sector bounds loaded. */
