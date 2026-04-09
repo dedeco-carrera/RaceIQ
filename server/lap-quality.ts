@@ -22,21 +22,27 @@ export function assessLapRecording(
 
   const startDist = packets[0].DistanceTraveled;
   const endDist = packets[packets.length - 1].DistanceTraveled;
-  const trackLength = endDist; // endDist ≈ full track length when lap ends at S/F
+  const lapDistance = endDist - startDist;
 
-  if (trackLength < 100) {
+  if (lapDistance < 100) {
     return { valid: false, reason: "telemetry distance too short" };
-  }
-
-  // Recording started more than 5% into the lap — sector data and analysis will be unreliable
-  if (startDist / trackLength > 0.05) {
-    return { valid: false, reason: "recording started mid-lap" };
   }
 
   // Lap time in telemetry should roughly match stored lapTime (within 2s)
   const telemetryLapTime = packets[packets.length - 1].CurrentLap;
   if (telemetryLapTime > 0 && Math.abs(telemetryLapTime - lapTime) > 2) {
     return { valid: false, reason: "telemetry lap time mismatch" };
+  }
+
+  // Start and end positions must be close (circuit lap should return to start/finish)
+  const first = packets[0];
+  const last = packets[packets.length - 1];
+  const dx = last.PositionX - first.PositionX;
+  const dz = last.PositionZ - first.PositionZ;
+  const gap = Math.sqrt(dx * dx + dz * dz);
+  // Allow up to 15% of lap distance as tolerance (covers pit entry, wide S/F zones)
+  if (gap > lapDistance * 0.15 && gap > 100) {
+    return { valid: false, reason: "start/end positions too far apart" };
   }
 
   return { valid: true, reason: null };

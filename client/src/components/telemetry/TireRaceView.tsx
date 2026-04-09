@@ -3,7 +3,7 @@ import type { TelemetryPacket } from "@shared/types";
 import type { DisplayPacket } from "@/lib/convert-packet";
 import { useUnits } from "@/hooks/useUnits";
 import { useSettings } from "@/hooks/queries";
-import { tireHealthTextClass, tireHealthBgClass, tireTempClass } from "@/lib/vehicle-dynamics";
+import { tireHealthTextClass, tireTempClass, tireTempBgClass } from "@/lib/vehicle-dynamics";
 
 /**
  * TireRaceView — Compact race-focused tire display.
@@ -65,19 +65,6 @@ export function TireRaceView({ packet }: { packet: DisplayPacket | TelemetryPack
     { label: "RR", temp: packet.TireTempRR, wear: packet.TireWearRR, grip: Math.abs(packet.TireCombinedSlipRR), wearPerSec: wearState.wearPerSec[3] },
   ];
 
-  // Estimate laps remaining from worst tire
-  let lapsEstimate: number | null = null;
-  if (wearState.wearRates.length > 0) {
-    const avgRates = [0, 1, 2, 3].map((i) => {
-      const rates = wearState.wearRates.map((r) => r[i]).filter((r) => r > 0);
-      return rates.length > 0 ? rates.reduce((s, v) => s + v, 0) / rates.length : 0;
-    });
-    const worstIdx = avgRates.indexOf(Math.max(...avgRates));
-    if (avgRates[worstIdx] > 0) {
-      lapsEstimate = Math.floor(tires[worstIdx].wear / avgRates[worstIdx]);
-    }
-  }
-
   return (
     <div>
       {/* 4 tires in 2x2 grid, full width */}
@@ -85,50 +72,37 @@ export function TireRaceView({ packet }: { packet: DisplayPacket | TelemetryPack
         {tires.map((t) => {
           const healthPct = (1 - t.wear) * 100;
           const healthTxtClr = tireHealthTextClass(healthPct, healthThresh);
-          const healthBg = tireHealthBgClass(healthPct, healthThresh);
+          const tempC = units.toTempC(t.temp);
           const tempDisplay = units.temp(t.temp);
-          const tc = tireTempClass(t.temp, units.thresholds);
+          const tc = tireTempClass(tempC, units.thresholds);
+          const tempBg = tireTempBgClass(tempC, units.thresholds);
 
           return (
-            <div key={t.label} className="bg-app-surface-alt/30 rounded-md p-2.5 flex items-center gap-2">
-              {/* Vertical health bar */}
+            <div key={t.label} className="rounded-md p-2.5 flex items-center gap-2">
+              {/* Vertical health bar — colored by tire temp */}
               <div className="flex flex-col items-center gap-1 shrink-0">
                 <span className="text-xs font-bold text-app-text-muted">{t.label}</span>
                 <div className="w-6 bg-app-surface rounded-sm overflow-hidden relative" style={{ height: 50 }}>
                   <div
-                    className={`absolute bottom-0 w-full rounded-sm ${healthBg}`}
+                    className={`absolute bottom-0 w-full rounded-sm ${tempBg}`}
                     style={{ height: `${healthPct}%` }}
                   />
                 </div>
               </div>
-              {/* Health % — large */}
+              {/* Health % + Temp stacked */}
               <div className="flex-1 min-w-0">
                 <span className={`text-3xl font-mono font-black tabular-nums leading-none ${healthTxtClr}`}>
                   {healthPct.toFixed(0)}%
                 </span>
-              </div>
-              {/* Temp */}
-              <div className="flex flex-col items-end shrink-0">
-                <span className={`text-xl font-mono font-bold tabular-nums leading-none ${tc}`}>
-                  {tempDisplay.toFixed(0)}°
-                </span>
-                <span className="text-[10px] font-mono text-app-text-dim">{units.tempUnit}</span>
+                <div className={`text-lg font-mono font-bold tabular-nums leading-none mt-0.5 ${tc}`}>
+                  {tempDisplay.toFixed(0)}°<span className="text-[10px] text-app-text-dim ml-0.5">{units.tempUnit}</span>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Tire summary: lap estimate */}
-      <div className="flex items-center justify-end mt-2 px-1">
-        {lapsEstimate != null && (
-          <span className="text-[10px] font-mono text-app-text-muted">
-            ~<span className={`font-bold ${lapsEstimate > 10 ? "text-emerald-400" : lapsEstimate > 5 ? "text-yellow-400" : "text-red-400"}`}>
-              {lapsEstimate}
-            </span> laps remaining
-          </span>
-        )}
-      </div>
     </div>
   );
 }
