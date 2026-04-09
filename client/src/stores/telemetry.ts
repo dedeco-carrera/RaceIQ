@@ -106,6 +106,10 @@ interface TelemetryState {
   setUpdateAvailable: (version: string | null) => void;
   setUpdateProgress: (progress: TelemetryState["updateProgress"]) => void;
   setVersionInfo: (info: VersionInfo) => void;
+  devState: unknown | null;
+  devStatePaused: boolean;
+  setDevState: (state: unknown) => void;
+  toggleDevStatePause: () => void;
   /** Update unit system — re-converts current packet */
   setUnitSystem: (unit: "metric" | "imperial") => void;
 }
@@ -129,6 +133,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   updateProgress: null,
   versionInfo: null,
   sessionLaps: [],
+  devState: null,
+  devStatePaused: false,
   setConnected: (connected) => set((prev) => {
     // Detect reconnection after update install
     if (connected && prev.updateProgress?.stage === "reconnecting") {
@@ -161,6 +167,11 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   setUpdateAvailable: (version) => set({ updateAvailable: version }),
   setUpdateProgress: (progress) => set({ updateProgress: progress }),
   setVersionInfo: (info) => set({ versionInfo: info }),
+  setDevState: (state) => {
+    if (get().devStatePaused) return;
+    set({ devState: state });
+  },
+  toggleDevStatePause: () => set((prev) => ({ devStatePaused: !prev.devStatePaused })),
   setUnitSystem: (unit) => {
     const { rawPacket } = get();
     set({
