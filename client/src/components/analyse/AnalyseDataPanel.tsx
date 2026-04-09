@@ -151,7 +151,6 @@ export function AnalyseDataPanel({
                 </div>
                 <AnalyseDynamicsPanel
                   currentPacket={currentPacket}
-                  currentDisplayPacket={currentDisplayPacket}
                   gameId={gameId}
                   units={units}
                 />

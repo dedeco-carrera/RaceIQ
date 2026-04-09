@@ -1,5 +1,4 @@
 import type { TelemetryPacket, GameId } from "@shared/types";
-import type { DisplayPacket } from "../../lib/convert-packet";
 import { Info } from "lucide-react";
 import {
   allWheelStates,
@@ -17,12 +16,11 @@ import { WheelTable } from "./WheelTable";
 
 interface Props {
   currentPacket: TelemetryPacket;
-  currentDisplayPacket: DisplayPacket | null;
   gameId: GameId | undefined;
   units: ReturnType<typeof useUnits>;
 }
 
-export function AnalyseDynamicsPanel({ currentPacket, currentDisplayPacket, gameId, units }: Props) {
+export function AnalyseDynamicsPanel({ currentPacket, gameId, units }: Props) {
   const isF1 = gameId === "f1-2025";
   const ws = allWheelStates(currentPacket);
   const fc = allFrictionCircle(currentPacket);
@@ -32,12 +30,6 @@ export function AnalyseDynamicsPanel({ currentPacket, currentDisplayPacket, game
 
   const C = (v: string, color: string) => <span style={{ color }}>{v}</span>;
 
-  const temps = [
-    currentDisplayPacket?.DisplayTireTempFL ?? currentPacket.TireTempFL,
-    currentDisplayPacket?.DisplayTireTempFR ?? currentPacket.TireTempFR,
-    currentDisplayPacket?.DisplayTireTempRL ?? currentPacket.TireTempRL,
-    currentDisplayPacket?.DisplayTireTempRR ?? currentPacket.TireTempRR,
-  ];
   const states = [
     { l: "FL", ...tireState(ws.fl.state, currentPacket.TireCombinedSlipFL), temp: tireTempLabel(units.toTempC(currentPacket.TireTempFL), units.thresholds) },
     { l: "FR", ...tireState(ws.fr.state, currentPacket.TireCombinedSlipFR), temp: tireTempLabel(units.toTempC(currentPacket.TireTempFR), units.thresholds) },

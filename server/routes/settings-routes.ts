@@ -125,6 +125,9 @@ export const settingsRoutes = new Hono()
         wsManager.setRefreshRate(merged.wsRefreshRate);
       }
       saveSettings(merged);
+      if (provided.onboardingComplete) {
+        wsManager.broadcastNotification({ type: "onboarding_complete" });
+      }
       return c.json(merged);
     } catch {
       return c.json({ error: `Failed to bind to port ${merged.udpPort}` }, 500);

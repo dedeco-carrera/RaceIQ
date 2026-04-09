@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useLaps, useSettings } from "../hooks/queries";
 import { formatLapTime } from "./LiveTelemetry";
 import { client } from "../lib/rpc";
@@ -101,10 +100,6 @@ export function HomePage() {
   const gameAdapter = gameId ? tryGetGame(gameId) : null;
   const { data: allLaps = [] } = useLaps();
   const { displaySettings } = useSettings();
-  const { data: stats } = useQuery({
-    queryKey: ["stats"],
-    queryFn: () => client.api.stats.$get({ query: {} }).then((r) => r.json()),
-  });
 
   // Resolve car/track names for recent laps
   const [carNames, setCarNames] = useState<Record<number, string>>({});

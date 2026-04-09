@@ -50,6 +50,8 @@ export function useWebSocket() {
             fetchVersionInfo();
           } else if (data.type === "update-progress") {
             useTelemetryStore.getState().setUpdateProgress({ stage: data.stage, percent: data.percent ?? 0 });
+          } else if (data.type === "onboarding_complete") {
+            queryClient.invalidateQueries({ queryKey: ["settings"] });
           } else if (data.type === "session-laps") {
             useTelemetryStore.getState().setSessionLaps(data.laps);
           } else if (data.type === "lap-saved") {

@@ -1,30 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTelemetryStore } from "../../stores/telemetry";
-import { useUnits } from "../../hooks/useUnits";
-import { useGameRoute } from "../../stores/game";
 import type { TelemetryPacket, F1ExtendedData } from "@shared/types";
 import { LapTimeChart } from "../LapTimeChart";
 import { SectorTimes } from "../SectorTimes";
 import { LapTimes } from "../telemetry/LapTimes";
 import { PitEstimate } from "../telemetry/PitEstimate";
-import { PitWindow } from "../telemetry/PitWindow";
 import { RecordedLaps } from "../RecordedLaps";
 import { NoDataView } from "../NoDataView";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatLapTime(seconds: number): string {
-  if (seconds <= 0) return "-:--.---";
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toFixed(3).padStart(6, "0")}`;
-}
-
-function formatSpeed(mps: number, unit: "metric" | "imperial"): string {
-  if (unit === "imperial") return `${Math.round(mps * 2.23694)}`;
-  return `${Math.round(mps * 3.6)}`;
-}
 
 function fToC(f: number): number {
   return (f - 32) / 1.8;
@@ -68,13 +53,8 @@ function formatGap(gap: number): string {
 export function F1LiveDashboard() {
   const rawPacket = useTelemetryStore((s) => s.rawPacket);
   const sectors = useTelemetryStore((s) => s.sectors);
-  const units = useUnits();
-
   const hasF1Data = rawPacket?.gameId === "f1-2025" && rawPacket.f1;
   const f1 = hasF1Data ? rawPacket.f1! : null;
-
-  const trackName = "Track"; // Would use useTrackName in real app
-  const carName = "Car";     // Would use useCarName in real app
 
   if (!f1) {
     return (
@@ -158,54 +138,6 @@ export function F1LiveDashboard() {
         <LapTimeChart packet={rawPacket!} />
         <div className="flex-1">
           <RecordedLaps showSessionType />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Race Header ──────────────────────────────────────────────────────────────
-
-function RaceHeader({ packet, f1, units }: {
-  packet: TelemetryPacket; f1: F1ExtendedData; units: ReturnType<typeof useUnits>;
-}) {
-  return (
-    <div>
-      <div className="p-2 border-b border-app-border flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-app-text-muted uppercase tracking-wider">
-          {f1.sessionType?.replace(/-/g, " ").toUpperCase() ?? "SESSION"}
-        </h2>
-        <div className="flex items-center gap-2">
-          {f1.totalLaps > 0 && (
-            <span className="text-xs text-app-text-secondary font-mono">{f1.totalLaps} laps</span>
-          )}
-        </div>
-      </div>
-      <div className="p-3">
-        <div className="flex items-baseline gap-4 mb-2">
-          <div>
-            <div className="text-xs text-app-text-muted uppercase tracking-wider">Position</div>
-            <div className="text-3xl font-mono font-bold text-app-text tabular-nums leading-none">
-              P{packet.RacePosition}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-app-text-muted uppercase tracking-wider">Lap</div>
-            <div className="text-3xl font-mono font-bold text-app-text tabular-nums leading-none">
-              {packet.LapNumber}{f1.totalLaps > 0 ? `/${f1.totalLaps}` : ""}
-            </div>
-          </div>
-        </div>
-        <LapTimes packet={packet} sectors={null} />
-        <div className="flex gap-4 items-end mt-3">
-          <div>
-            <div className="text-xs text-app-text-muted uppercase tracking-wider">Dist</div>
-            <div className="text-xl font-mono font-bold text-app-text tabular-nums leading-none">
-              {units.speedLabel === "km/h"
-                ? `${(packet.DistanceTraveled / 1000).toFixed(2)} km`
-                : `${(packet.DistanceTraveled / 1609.34).toFixed(2)} mi`}
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -478,17 +410,19 @@ function GridSection({ f1, playerPosition }: { f1: F1ExtendedData; playerPositio
       }
     }
 
-    const result: Array<typeof sorted[0] | { separator: true; position: number }> = [];
+    type SeparatorEntry = { separator: true; position: number };
+    type GridEntry = typeof sorted[0] | SeparatorEntry;
+    const result: GridEntry[] = [];
     let lastIdx = -1;
     for (const idx of [...indices].sort((a, b) => a - b)) {
       if (lastIdx >= 0 && idx - lastIdx > 1) {
-        result.push({ separator: true, position: -idx } as any);
+        result.push({ separator: true, position: -idx });
       }
       result.push(sorted[idx]);
       lastIdx = idx;
     }
     if (lastIdx < sorted.length - 1) {
-      result.push({ separator: true, position: -999 } as any);
+      result.push({ separator: true, position: -999 });
     }
     return result;
   })();
@@ -521,8 +455,8 @@ function GridSection({ f1, playerPosition }: { f1: F1ExtendedData; playerPositio
             </tr>
           </thead>
           <tbody>
-            {focused.map((entry: any) => {
-              if (entry.separator) {
+            {focused.map((entry) => {
+              if ("separator" in entry) {
                 return (
                   <tr key={`sep-${entry.position}`}>
                     <td colSpan={10} className="text-center text-xs text-app-text-dim py-0.5">···</td>

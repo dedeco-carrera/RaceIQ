@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { isDevelopment } from "@/lib/env";
-import { Link } from "@tanstack/react-router";
+import { useUiStore } from "../stores/ui";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,7 @@ const NAV_ITEMS = [
 type SectionId = (typeof NAV_ITEMS)[number]["id"];
 
 export function Settings({ initialSection, onClose }: { initialSection?: SectionId; onClose?: () => void } = {}) {
+  const { openOnboarding } = useUiStore();
   const [activeSection, setActiveSection] = useState<SectionId>(initialSection ?? "theme");
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [udpPort, setUdpPort] = useState("5301");
@@ -225,11 +226,12 @@ export function Settings({ initialSection, onClose }: { initialSection?: Section
           </button>
         ))}
         <div className="mt-auto pt-2 border-t border-app-border mx-2">
-          <Link to="/onboarding" onClick={onClose}>
-            <button className="w-full text-left px-4 py-2 text-sm text-app-text-muted hover:text-app-text hover:bg-app-surface-alt transition-colors">
-              Setup Wizard
-            </button>
-          </Link>
+          <button
+            className="w-full text-left px-4 py-2 text-sm text-app-text-muted hover:text-app-text hover:bg-app-surface-alt transition-colors"
+            onClick={() => { onClose?.(); openOnboarding(); }}
+          >
+            Setup Wizard
+          </button>
         </div>
       </nav>
 
