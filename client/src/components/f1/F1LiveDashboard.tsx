@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useTelemetryStore } from "../../stores/telemetry";
-import type { TelemetryPacket, F1ExtendedData } from "@shared/types";
+import type { F1ExtendedData } from "@shared/types";
 import { tryGetGame } from "@shared/games/registry";
+import { TireGrid } from "../telemetry/TireGrid";
 import { LapTimeChart } from "../LapTimeChart";
 import { SectorTimes } from "../SectorTimes";
 import { LapTimes } from "../telemetry/LapTimes";
@@ -113,8 +114,19 @@ export function F1LiveDashboard() {
           </div>
         </div>
         <div className="border-b border-app-border grid grid-cols-2">
-          <div className="border-r border-app-border p-3">
-            <TireTempDiagram packet={rawPacket!} />
+          <div className="border-r border-app-border">
+            <TireGrid
+              tires={[
+                { label: "FL", tempC: Math.round(fToC(rawPacket!.TireTempFL)), wear: rawPacket!.TireWearFL, brakeTemp: rawPacket!.f1?.brakeTempFL ?? 0, pressure: rawPacket!.f1?.tyrePressureFL ?? 0 },
+                { label: "FR", tempC: Math.round(fToC(rawPacket!.TireTempFR)), wear: rawPacket!.TireWearFR, brakeTemp: rawPacket!.f1?.brakeTempFR ?? 0, pressure: rawPacket!.f1?.tyrePressureFR ?? 0 },
+                { label: "RL", tempC: Math.round(fToC(rawPacket!.TireTempRL)), wear: rawPacket!.TireWearRL, brakeTemp: rawPacket!.f1?.brakeTempRL ?? 0, pressure: rawPacket!.f1?.tyrePressureRL ?? 0 },
+                { label: "RR", tempC: Math.round(fToC(rawPacket!.TireTempRR)), wear: rawPacket!.TireWearRR, brakeTemp: rawPacket!.f1?.brakeTempRR ?? 0, pressure: rawPacket!.f1?.tyrePressureRR ?? 0 },
+              ]}
+              healthThresholds={tryGetGame("f1-2025")?.tireHealthThresholds ?? { green: 0.70, yellow: 0.50 }}
+              tempThresholds={{ blue: 80, orange: 105, red: 115 }}
+              compound={rawPacket!.f1?.tyreCompound ?? "unknown"}
+              compoundStyle={COMPOUND_COLORS[rawPacket!.f1?.tyreCompound ?? "unknown"] ?? COMPOUND_COLORS.unknown}
+            />
           </div>
           <div>
             <div className="p-2 border-b border-app-border">
@@ -168,80 +180,6 @@ function DrsSection({ f1 }: { f1: F1ExtendedData }) {
   );
 }
 
-// ── Tire Temperature Diagram ─────────────────────────────────────────────────
-
-function TireTempDiagram({ packet }: { packet: TelemetryPacket }) {
-  const f1 = packet.f1;
-  const compound = f1?.tyreCompound || "unknown";
-  const compoundColors = COMPOUND_COLORS[compound] ?? COMPOUND_COLORS.unknown;
-  const thresh = tryGetGame("f1-2025")?.tireHealthThresholds ?? { green: 0.70, yellow: 0.50 };
-  const greenPct = thresh.green * 100;
-  const yellowPct = thresh.yellow * 100;
-  const tires = [
-    { label: "FL", temp: Math.round(fToC(packet.TireTempFL)), wear: packet.TireWearFL, brakeTemp: f1?.brakeTempFL ?? 0, pressure: f1?.tyrePressureFL ?? 0 },
-    { label: "FR", temp: Math.round(fToC(packet.TireTempFR)), wear: packet.TireWearFR, brakeTemp: f1?.brakeTempFR ?? 0, pressure: f1?.tyrePressureFR ?? 0 },
-    { label: "RL", temp: Math.round(fToC(packet.TireTempRL)), wear: packet.TireWearRL, brakeTemp: f1?.brakeTempRL ?? 0, pressure: f1?.tyrePressureRL ?? 0 },
-    { label: "RR", temp: Math.round(fToC(packet.TireTempRR)), wear: packet.TireWearRR, brakeTemp: f1?.brakeTempRR ?? 0, pressure: f1?.tyrePressureRR ?? 0 },
-  ];
-
-  // F1 tire temp colors: blue < 80°C, green 85-105°C, orange 105-115°C, red > 115°C
-  const tempColor = (t: number) => {
-    if (t > 115) return "text-red-400";
-    if (t > 105) return "text-orange-400";
-    if (t < 80) return "text-blue-400";
-    return "text-emerald-400";
-  };
-
-  const tempBg = (t: number) => {
-    if (t > 115) return "bg-red-500";
-    if (t > 105) return "bg-orange-400";
-    if (t < 80) return "bg-blue-500";
-    return "bg-emerald-500";
-  };
-
-  const brakeColor = (t: number) => {
-    if (t > 800) return "text-red-400";
-    if (t > 500) return "text-orange-400";
-    if (t < 200) return "text-blue-400";
-    return "text-app-text-secondary";
-  };
-
-  const health = (wear: number) => Math.max(0, (1 - wear) * 100);
-
-  return (
-    <div>
-      <div className="p-2 border-b border-app-border flex items-center justify-between">
-        <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Tires</h2>
-        <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${compoundColors.bg} ${compoundColors.text}`}>{compound}</span>
-      </div>
-      <div className="p-3 flex flex-col justify-center h-full">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-          {tires.map((t) => {
-            const h = health(t.wear);
-            const hColor = h > greenPct ? "bg-emerald-400" : h > yellowPct ? "bg-yellow-400" : "bg-red-500";
-            return (
-              <div key={t.label} className="flex items-center gap-3">
-                <div className={`w-4 h-12 rounded-sm ${tempBg(t.temp)}`} />
-                <div className="flex-1 min-w-0">
-                  <div className={`text-xl font-mono font-bold tabular-nums leading-none ${tempColor(t.temp)}`}>
-                    {t.temp}&deg;C
-                  </div>
-                  <div className="flex gap-3 mt-1 text-xl font-mono font-bold tabular-nums leading-none">
-                    <span className={brakeColor(t.brakeTemp)}>B:{t.brakeTemp}&deg;</span>
-                    <span className="text-app-text-muted">{t.pressure.toFixed(1)}psi</span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden mt-1">
-                    <div className={`h-full rounded-full ${hColor}`} style={{ width: `${h}%` }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Car Damage Section ──────────────────────────────────────────────────────
 

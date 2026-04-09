@@ -13,7 +13,7 @@ import { SurfaceConditions } from "./telemetry/SurfaceConditions";
 import { GForceCircle } from "./telemetry/GForceCircle";
 import { ArcGauge, FuelGauge, PowerTorque } from "./telemetry/Gauges";
 import { TelemetryCharts } from "./telemetry/TelemetryCharts";
-import { TireRaceView } from "./telemetry/TireRaceView";
+import { TireGrid } from "./telemetry/TireGrid";
 
 // Re-export for backward compatibility
 export { formatLapTime } from "../lib/format";
@@ -114,12 +114,16 @@ export function LiveTelemetry({ packet, mode = "driver" }: Props) {
       <div className="grid gap-0 p-0">
         {/* Tire Health */}
         <div className="border-b border-app-border">
-          <div className="p-2 border-b border-app-border">
-            <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Tire Health</h2>
-          </div>
-          <div className="p-3">
-            <TireRaceView packet={packet} />
-          </div>
+          <TireGrid
+            tires={[
+              { label: "FL", tempC: units.toTempC(packet.TireTempFL), wear: packet.TireWearFL },
+              { label: "FR", tempC: units.toTempC(packet.TireTempFR), wear: packet.TireWearFR },
+              { label: "RL", tempC: units.toTempC(packet.TireTempRL), wear: packet.TireWearRL },
+              { label: "RR", tempC: units.toTempC(packet.TireTempRR), wear: packet.TireWearRR },
+            ]}
+            healthThresholds={(gameId ? tryGetGame(gameId) : null)?.tireHealthThresholds ?? { green: 0.70, yellow: 0.40 }}
+            tempThresholds={{ blue: 60, orange: 85, red: 100 }}
+          />
         </div>
 
         {/* Pit Window */}
