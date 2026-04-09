@@ -567,6 +567,30 @@ class LapDetector {
     // Preserve sector index from new lap's first packet so we don't fire a false transition
     this.accPrevSectorIdx = newLapFirstPacket.acc?.currentSectorIndex ?? 0;
   }
+
+  getDebugState(): Record<string, unknown> {
+    return {
+      currentSession: this.currentSession,
+      currentLapNumber: this.currentLapNumber,
+      lapBufferLength: this.lapBuffer?.length ?? 0,
+      lapIsValid: this.lapIsValid,
+      invalidReason: this.invalidReason,
+      lastLastLap: this.lastLastLap,
+      lastTimestampMS: this.lastTimestampMS,
+      lastPacketTime: this.lastPacketTime,
+      recentPacketCount: this.recentPacketCount,
+      lastRateCheck: this.lastRateCheck,
+      packetRate: this.packetRate,
+      distanceAtLapStart: this._distanceAtLapStart,
+      fuelAtLapStart: this.fuelAtLapStart,
+      fuelHistoryLength: this._fuelHistory?.length ?? 0,
+      tireWearAtLapStart: this.tireWearAtLapStart,
+      tireWearHistoryLength: this._tireWearHistory?.length ?? 0,
+      accS1: this.accS1,
+      accS2: this.accS2,
+      accPrevSectorIdx: this.accPrevSectorIdx,
+    };
+  }
 }
 
 /**
