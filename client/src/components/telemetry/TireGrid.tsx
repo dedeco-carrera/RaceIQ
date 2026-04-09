@@ -1,24 +1,35 @@
 import { useUnits } from "@/hooks/useUnits";
 
-function BrakePad({ tempC }: { tempC: number }) {
+const PAD_NEW_MM = 29; // ACC: pads start at 29mm when new
+const PAD_TOTAL_H = 35; // px height of friction material area in SVG
+
+function BrakePad({ tempC, padMm }: { tempC: number; padMm?: number }) {
   const fill = tempC > 700 ? "#ef4444" : tempC > 450 ? "#f97316" : tempC < 175 ? "#60a5fa" : "#64748b";
+  // If padMm provided, height shows remaining material; otherwise full height
+  const frictionH = padMm !== undefined
+    ? Math.max(2, (Math.min(padMm, PAD_NEW_MM) / PAD_NEW_MM) * PAD_TOTAL_H)
+    : PAD_TOTAL_H;
+  const frictionY = 9 + (PAD_TOTAL_H - frictionH); // anchor to bottom of friction zone
   return (
     <svg width="7" height="44" viewBox="0 0 7 44" className="shrink-0">
       {/* Steel backing plate */}
       <rect x="0" y="0" width="7" height="9" rx="1" fill="#334155" />
-      {/* Friction material — colored by temperature */}
-      <rect x="0.5" y="9" width="6" height="35" rx="0.5" fill={fill} />
+      {/* Worn-away zone (empty) */}
+      <rect x="0.5" y="9" width="6" height={PAD_TOTAL_H} rx="0.5" fill="#1e293b" />
+      {/* Remaining friction material — height = wear remaining */}
+      <rect x="0.5" y={frictionY} width="6" height={frictionH} rx="0.5" fill={fill} />
       {/* Subtle sheen */}
-      <rect x="1.5" y="10" width="2" height="33" rx="0.5" fill="white" opacity="0.07" />
+      <rect x="1.5" y={frictionY + 1} width="2" height={Math.max(0, frictionH - 2)} rx="0.5" fill="white" opacity="0.07" />
     </svg>
   );
 }
 
 export interface WheelData {
-  tempC: number;      // always °C — caller normalises
-  wear: number;       // 0 (new) → 1 (gone)
-  brakeTemp?: number; // °C, optional
-  pressure?: number;  // psi, optional
+  tempC: number;       // always °C — caller normalises
+  wear: number;        // 0 (new) → 1 (gone)
+  brakeTemp?: number;  // °C, optional
+  brakePadMm?: number; // mm remaining (ACC: new = 29mm), drives pad height
+  pressure?: number;   // psi, optional
 }
 
 interface TireGridProps {
@@ -95,7 +106,7 @@ export function TireGrid({ fl, fr, rl, rr, healthThresholds, tempThresholds, com
             return (
               <div key={w.label} className="flex items-center gap-2">
                 <div className={`w-4 h-12 rounded-sm ${tempBg(w.tempC)}`} />
-                {hasBrake && <BrakePad tempC={w.brakeTemp ?? 0} />}
+                {hasBrake && <BrakePad tempC={w.brakeTemp ?? 0} padMm={w.brakePadMm} />}
                 <div className="flex-1 min-w-0">
                   <div className={`text-xl font-mono font-bold tabular-nums leading-none ${tempColor(w.tempC)}`}>
                     {tempDisplay}{units.tempLabel}
