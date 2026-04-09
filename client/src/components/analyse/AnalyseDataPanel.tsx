@@ -155,10 +155,6 @@ export function AnalyseDataPanel({
                   units={units}
                 />
 
-                {gameId === "f1-2025" && (
-                  <AnalyseF1ErsPanel currentPacket={currentPacket} />
-                )}
-
                 <AnalyseTireWheelsPanel
                   currentPacket={currentPacket}
                   currentDisplayPacket={currentDisplayPacket}
@@ -168,6 +164,10 @@ export function AnalyseDataPanel({
                 />
 
                 <AnalyseSuspensionPanel currentPacket={currentPacket} />
+
+                {gameId === "f1-2025" && (
+                  <AnalyseF1ErsPanel currentPacket={currentPacket} />
+                )}
               </>
             )}
           </>

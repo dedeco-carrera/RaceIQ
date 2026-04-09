@@ -37,12 +37,6 @@ export function AnalyseDynamicsPanel({ currentPacket, gameId, units }: Props) {
     { l: "RR", ...tireState(ws.rr.state, currentPacket.TireCombinedSlipRR), temp: tireTempLabel(units.toTempC(currentPacket.TireTempRR), units.thresholds) },
   ];
 
-  const surfaceLabel = (rumble: boolean, puddle: number) => {
-    if (rumble) return C("CURB", "#fb923c");
-    if (puddle > 0) return C(`WET ${(puddle * 100).toFixed(0)}%`, "#3b82f6");
-    return <span className="text-app-text-dim">—</span>;
-  };
-
   const speedMph = currentPacket.Speed * 2.23694;
   const angleColor = (rad: number) => {
     const deg = Math.abs(rad * (180 / Math.PI));
@@ -121,24 +115,19 @@ export function AnalyseDynamicsPanel({ currentPacket, gameId, units }: Props) {
         </span>
       </div>
 
-      {/* Grip / slip ratios — Forza has real data, F1 skips */}
-      {!isF1 && (
-        <>
-          {/* Tire state */}
-          <WheelTable rows={[
-            { label: "Grip Ask", fl: C(`${(fc.fl * 100).toFixed(0)}%`, frictionUtilColor(fc.fl)), fr: C(`${(fc.fr * 100).toFixed(0)}%`, frictionUtilColor(fc.fr)), rl: C(`${(fc.rl * 100).toFixed(0)}%`, frictionUtilColor(fc.rl)), rr: C(`${(fc.rr * 100).toFixed(0)}%`, frictionUtilColor(fc.rr)) },
-            { label: "Traction", fl: C(states[0].label, states[0].color), fr: C(states[1].label, states[1].color), rl: C(states[2].label, states[2].color), rr: C(states[3].label, states[3].color) },
-            { label: "Temp", fl: C(states[0].temp.label, states[0].temp.color), fr: C(states[1].temp.label, states[1].temp.color), rl: C(states[2].temp.label, states[2].temp.color), rr: C(states[3].temp.label, states[3].temp.color) },
-            { label: "Surface", fl: surfaceLabel(currentPacket.WheelOnRumbleStripFL !== 0, currentPacket.WheelInPuddleDepthFL), fr: surfaceLabel(currentPacket.WheelOnRumbleStripFR !== 0, currentPacket.WheelInPuddleDepthFR), rl: surfaceLabel(currentPacket.WheelOnRumbleStripRL !== 0, currentPacket.WheelInPuddleDepthRL), rr: surfaceLabel(currentPacket.WheelOnRumbleStripRR !== 0, currentPacket.WheelInPuddleDepthRR) },
-          ]} />
+      {/* Tire state */}
+      <WheelTable rows={[
+        { label: "Grip Ask", fl: C(`${(fc.fl * 100).toFixed(0)}%`, frictionUtilColor(fc.fl)), fr: C(`${(fc.fr * 100).toFixed(0)}%`, frictionUtilColor(fc.fr)), rl: C(`${(fc.rl * 100).toFixed(0)}%`, frictionUtilColor(fc.rl)), rr: C(`${(fc.rr * 100).toFixed(0)}%`, frictionUtilColor(fc.rr)) },
+        { label: "Traction", fl: C(states[0].label, states[0].color), fr: C(states[1].label, states[1].color), rl: C(states[2].label, states[2].color), rr: C(states[3].label, states[3].color) },
+        { label: "Temp", fl: C(states[0].temp.label, states[0].temp.color), fr: C(states[1].temp.label, states[1].temp.color), rl: C(states[2].temp.label, states[2].temp.color), rr: C(states[3].temp.label, states[3].temp.color) },
+        ...(!isF1 ? [{ label: "Surface", fl: <span className="text-app-text-dim">{currentPacket.WheelOnRumbleStripFL !== 0 ? C("CURB", "#fb923c") : currentPacket.WheelInPuddleDepthFL > 0 ? C(`WET ${(currentPacket.WheelInPuddleDepthFL * 100).toFixed(0)}%`, "#3b82f6") : "—"}</span>, fr: <span className="text-app-text-dim">{currentPacket.WheelOnRumbleStripFR !== 0 ? C("CURB", "#fb923c") : currentPacket.WheelInPuddleDepthFR > 0 ? C(`WET ${(currentPacket.WheelInPuddleDepthFR * 100).toFixed(0)}%`, "#3b82f6") : "—"}</span>, rl: <span className="text-app-text-dim">{currentPacket.WheelOnRumbleStripRL !== 0 ? C("CURB", "#fb923c") : currentPacket.WheelInPuddleDepthRL > 0 ? C(`WET ${(currentPacket.WheelInPuddleDepthRL * 100).toFixed(0)}%`, "#3b82f6") : "—"}</span>, rr: <span className="text-app-text-dim">{currentPacket.WheelOnRumbleStripRR !== 0 ? C("CURB", "#fb923c") : currentPacket.WheelInPuddleDepthRR > 0 ? C(`WET ${(currentPacket.WheelInPuddleDepthRR * 100).toFixed(0)}%`, "#3b82f6") : "—"}</span> }] : []),
+      ]} />
 
-          {/* Slip */}
-          <WheelTable title={slipTitle} borderTop rows={[
-            { label: "Ratio", fl: C(`${(ws.fl.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.fl.slipRatio)), fr: C(`${(ws.fr.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.fr.slipRatio)), rl: C(`${(ws.rl.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.rl.slipRatio)), rr: C(`${(ws.rr.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.rr.slipRatio)) },
-            { label: "Angle", fl: C(`${fmt(currentPacket.TireSlipAngleFL)}°`, angleColor(currentPacket.TireSlipAngleFL)), fr: C(`${fmt(currentPacket.TireSlipAngleFR)}°`, angleColor(currentPacket.TireSlipAngleFR)), rl: C(`${fmt(currentPacket.TireSlipAngleRL)}°`, angleColor(currentPacket.TireSlipAngleRL)), rr: C(`${fmt(currentPacket.TireSlipAngleRR)}°`, angleColor(currentPacket.TireSlipAngleRR)) },
-          ]} />
-        </>
-      )}
+      {/* Slip */}
+      <WheelTable title={slipTitle} borderTop rows={[
+        { label: "Ratio", fl: C(`${(ws.fl.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.fl.slipRatio)), fr: C(`${(ws.fr.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.fr.slipRatio)), rl: C(`${(ws.rl.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.rl.slipRatio)), rr: C(`${(ws.rr.slipRatio * 100).toFixed(0)}%`, slipRatioColor(ws.rr.slipRatio)) },
+        { label: "Angle", fl: C(`${fmt(currentPacket.TireSlipAngleFL)}°`, angleColor(currentPacket.TireSlipAngleFL)), fr: C(`${fmt(currentPacket.TireSlipAngleFR)}°`, angleColor(currentPacket.TireSlipAngleFR)), rl: C(`${fmt(currentPacket.TireSlipAngleRL)}°`, angleColor(currentPacket.TireSlipAngleRL)), rr: C(`${fmt(currentPacket.TireSlipAngleRR)}°`, angleColor(currentPacket.TireSlipAngleRR)) },
+      ]} />
     </div>
   );
 }
