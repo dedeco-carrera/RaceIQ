@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as Fm23RouteImport } from './routes/fm23'
 import { Route as F125RouteImport } from './routes/f125'
+import { Route as DevRouteImport } from './routes/dev'
 import { Route as AccRouteImport } from './routes/acc'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as Fm23IndexRouteImport } from './routes/fm23/index'
@@ -63,6 +64,11 @@ const Fm23Route = Fm23RouteImport.update({
 const F125Route = F125RouteImport.update({
   id: '/f125',
   path: '/f125',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevRoute = DevRouteImport.update({
+  id: '/dev',
+  path: '/dev',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccRoute = AccRouteImport.update({
@@ -284,6 +290,7 @@ const Fm23TunesEditTuneIdRoute = Fm23TunesEditTuneIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/acc': typeof AccRouteWithChildren
+  '/dev': typeof DevRoute
   '/f125': typeof F125RouteWithChildren
   '/fm23': typeof Fm23RouteWithChildren
   '/acc/analyse': typeof AccAnalyseRoute
@@ -330,6 +337,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dev': typeof DevRoute
   '/acc/analyse': typeof AccAnalyseRoute
   '/acc/cars': typeof AccCarsRoute
   '/acc/compare': typeof AccCompareRoute
@@ -371,6 +379,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/acc': typeof AccRouteWithChildren
+  '/dev': typeof DevRoute
   '/f125': typeof F125RouteWithChildren
   '/fm23': typeof Fm23RouteWithChildren
   '/acc/analyse': typeof AccAnalyseRoute
@@ -420,6 +429,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/acc'
+    | '/dev'
     | '/f125'
     | '/fm23'
     | '/acc/analyse'
@@ -466,6 +476,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dev'
     | '/acc/analyse'
     | '/acc/cars'
     | '/acc/compare'
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/acc'
+    | '/dev'
     | '/f125'
     | '/fm23'
     | '/acc/analyse'
@@ -554,6 +566,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccRoute: typeof AccRouteWithChildren
+  DevRoute: typeof DevRoute
   F125Route: typeof F125RouteWithChildren
   Fm23Route: typeof Fm23RouteWithChildren
 }
@@ -572,6 +585,13 @@ declare module '@tanstack/react-router' {
       path: '/f125'
       fullPath: '/f125'
       preLoaderRoute: typeof F125RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev': {
+      id: '/dev'
+      path: '/dev'
+      fullPath: '/dev'
+      preLoaderRoute: typeof DevRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/acc': {
@@ -1047,6 +1067,7 @@ const Fm23RouteWithChildren = Fm23Route._addFileChildren(Fm23RouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccRoute: AccRouteWithChildren,
+  DevRoute: DevRoute,
   F125Route: F125RouteWithChildren,
   Fm23Route: Fm23RouteWithChildren,
 }
