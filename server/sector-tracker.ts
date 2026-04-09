@@ -156,9 +156,16 @@ export class SectorTracker {
           if (s2Time < this.bestTimes[1]) this.bestTimes[1] = s2Time;
           if (s3Time < this.bestTimes[2]) this.bestTimes[2] = s3Time;
 
-          if (lapMeta.lapTime < this.bestLapTime) this.bestLapTime = lapMeta.lapTime;
-          // Reference lap is only built from live session laps (via updateRefLap),
-          // not seeded from historical data — keeps delta relative to this session.
+          if (lapMeta.lapTime < this.bestLapTime) {
+            this.bestLapTime = lapMeta.lapTime;
+            // For ACC (no track centerlines), seed refLap from best historical lap
+            // This enables EST/delta from session start, not just after first live lap.
+            // F1/Forza keep the original behavior (no refLap until first live lap).
+            // Live laps will still update refLap if they're faster (via updateRefLap).
+            if (!this.refLap && gameId === "acc" && lap?.telemetry) {
+              this.refLap = this.buildRefLapFromPackets(lap.telemetry, lapMeta.lapTime);
+            }
+          }
         }
       }
     } catch (err) {
@@ -291,6 +298,19 @@ export class SectorTracker {
     return t[lo] + frac * (t[hi] - t[lo]);
   }
 
+  /** Build a reference lap structure from packet data. */
+  private buildRefLapFromPackets(packets: TelemetryPacket[], lapTime: number): ReferenceLap {
+    const lapDistStart = packets[0].DistanceTraveled;
+    const distances = new Float64Array(packets.length);
+    const times = new Float64Array(packets.length);
+
+    for (let i = 0; i < packets.length; i++) {
+      distances[i] = packets[i].DistanceTraveled - lapDistStart;
+      times[i] = packets[i].CurrentLap;
+    }
+    return { distances, times, lapTime };
+  }
+
   /** Update reference lap and bests from a just-completed valid live lap. */
   updateRefLap(packets: TelemetryPacket[], lapDistStart: number, lapTime: number, sectors?: { s1: number; s2: number; s3: number } | null): void {
     if (lapTime < this.bestLapTime) this.bestLapTime = lapTime;
@@ -300,13 +320,7 @@ export class SectorTracker {
       if (sectors.s3 > 0 && sectors.s3 < this.bestTimes[2]) this.bestTimes[2] = sectors.s3;
     }
     if (this.refLap && lapTime >= this.refLap.lapTime) return;
-    const distances = new Float64Array(packets.length);
-    const times = new Float64Array(packets.length);
-    for (let i = 0; i < packets.length; i++) {
-      distances[i] = packets[i].DistanceTraveled - lapDistStart;
-      times[i] = packets[i].CurrentLap;
-    }
-    this.refLap = { distances, times, lapTime };
+    this.refLap = this.buildRefLapFromPackets(packets, lapTime);
   }
 
   /** Initialize tracker state for testing (bypasses async reset/DB). */
@@ -341,7 +355,8 @@ export class SectorTracker {
       lastLapTime: this.lastLapTime,
       initialized: this.initialized,
       prevCurrentLap: this.prevCurrentLap,
-      refLap: this.refLap,
+      refLapLength: this.refLap?.distances.length ?? 0,
+      refLapTime: this.refLap?.lapTime ?? null,
       currentTrackOrdinal: this.currentTrackOrdinal,
       currentCarOrdinal: this.currentCarOrdinal,
     };
@@ -785,15 +800,15 @@ export class PitTracker {
 
   getDebugState(): Record<string, unknown> {
     return {
-      fuelHistory: this.fuelHistory,
+      fuelHistoryLength: this.fuelHistory.length,
       fuelAtLapStart: this.fuelAtLapStart,
       lastLap: this.lastLap,
-      tireWearHistory: this.tireWearHistory,
+      tireWearHistoryLength: this.tireWearHistory.length,
       wearAtLapStart: this.wearAtLapStart,
       recentWearCurvesLength: this.recentWearCurves.length,
-      refWearCurve: this.refWearCurve,
+      refWearCurveLength: this.refWearCurve ? this.refWearCurve.wears[0]?.length ?? 0 : 0,
       liveWearAtLapStart: this.liveWearAtLapStart,
-      lapTimeHistory: this.lapTimeHistory,
+      lapTimeHistoryLength: this.lapTimeHistory.length,
       lastCurrentLap: this.lastCurrentLap,
       sessionLapCount: this.sessionLapCount,
       badHealthThreshold: this.badHealthThreshold,
