@@ -28,4 +28,8 @@ export const accAdapter: GameAdapter = {
   getSharedTrackName(): string | undefined {
     return undefined;
   },
+
+  // ACC heading = atan2(-z, x): heading=0 means facing +X
+  carForwardOffset(yaw) { return [Math.cos(yaw), -Math.sin(yaw)]; },
+  followViewRotation(yaw) { return Math.PI / 2 - yaw; },
 };
