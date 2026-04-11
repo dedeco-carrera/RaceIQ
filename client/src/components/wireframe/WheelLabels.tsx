@@ -104,18 +104,30 @@ export function HealthLabel({ wear, side }: { wear: number; side: "left" | "righ
   const health = 1 - wear;
   const pct = (health * 100).toFixed(0);
   const color = health > 0.7 ? "#34d399" : health > 0.4 ? "#fbbf24" : "#ef4444";
-  const text = `${pct}% H`;
+  const text = `${pct}%`;
   const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 128;
     canvas.height = 48;
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, 128, 48);
+    // Percentage text — shifted right to make room for the heart icon on the left.
     ctx.font = "bold 26px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = color;
-    ctx.fillText(text, 64, 24);
+    ctx.fillText(text, 78, 24);
+    // Heart icon — filled, sits to the left of the %.
+    const hx = 22, hy = 24, hs = 11;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy + hs * 0.8);
+    ctx.bezierCurveTo(hx, hy + hs * 0.3, hx - hs, hy + hs * 0.3, hx - hs, hy - hs * 0.2);
+    ctx.bezierCurveTo(hx - hs, hy - hs * 0.8, hx - hs * 0.5, hy - hs, hx, hy - hs * 0.4);
+    ctx.bezierCurveTo(hx + hs * 0.5, hy - hs, hx + hs, hy - hs * 0.8, hx + hs, hy - hs * 0.2);
+    ctx.bezierCurveTo(hx + hs, hy + hs * 0.3, hx, hy + hs * 0.3, hx, hy + hs * 0.8);
+    ctx.closePath();
+    ctx.fill();
     const tex = new THREE.CanvasTexture(canvas);
     tex.needsUpdate = true;
     return tex;
