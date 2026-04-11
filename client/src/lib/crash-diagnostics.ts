@@ -14,7 +14,40 @@
 const LAST_ERROR_KEY = "raceiq.crash.last_error";
 const LAST_REJECTION_KEY = "raceiq.crash.last_rejection";
 const LAST_HEAP_KEY = "raceiq.crash.last_heap";
+const LAST_GPU_KEY = "raceiq.crash.last_gpu";
 const LOAD_COUNT_KEY = "raceiq.crash.load_count";
+
+/** Latest GPU snapshot, populated by CarWireframe when the 3D scene is mounted. */
+interface GpuSnapshot {
+  geometries: number;
+  textures: number;
+  programs: number;
+  drawCalls: number;
+  triangles: number;
+  ts: number;
+  url: string;
+}
+let lastGpuSnapshot: GpuSnapshot | null = null;
+
+/**
+ * Called from the 3D scene each second with Three.js renderer.info. The
+ * most recent snapshot is included in the heap breadcrumb so a GPU-side
+ * crash leaves visible evidence (runaway geometry/texture/program counts)
+ * even though it won't show up in performance.memory.
+ */
+export function recordGpuSnapshot(
+  info: { memory: { geometries: number; textures: number }; programs: { length: number } | null; render: { calls: number; triangles: number } },
+): void {
+  lastGpuSnapshot = {
+    geometries: info.memory.geometries,
+    textures: info.memory.textures,
+    programs: info.programs?.length ?? 0,
+    drawCalls: info.render.calls,
+    triangles: info.render.triangles,
+    ts: Date.now(),
+    url: location.href,
+  };
+}
 
 // performance.memory is non-standard (Chromium only) and not in lib.dom.d.ts.
 interface PerformanceMemory {
@@ -47,11 +80,13 @@ function reportPreviousCrash(): void {
     const err = localStorage.getItem(LAST_ERROR_KEY);
     const rej = localStorage.getItem(LAST_REJECTION_KEY);
     const heap = localStorage.getItem(LAST_HEAP_KEY);
-    if (err || rej || heap) {
+    const gpu = localStorage.getItem(LAST_GPU_KEY);
+    if (err || rej || heap || gpu) {
       console.group("%c[RaceIQ] Crash diagnostics from previous session", "color:#f59e0b;font-weight:bold");
       if (err) console.warn("last error:", JSON.parse(err));
       if (rej) console.warn("last rejection:", JSON.parse(rej));
       if (heap) console.warn("last heap sample (before tab died):", JSON.parse(heap));
+      if (gpu) console.warn("last GPU sample (before tab died):", JSON.parse(gpu));
       console.groupEnd();
     }
     // Clear so each new load starts fresh — we only want *the most recent*
@@ -59,6 +94,7 @@ function reportPreviousCrash(): void {
     localStorage.removeItem(LAST_ERROR_KEY);
     localStorage.removeItem(LAST_REJECTION_KEY);
     localStorage.removeItem(LAST_HEAP_KEY);
+    localStorage.removeItem(LAST_GPU_KEY);
   } catch {
     // ignore
   }
@@ -104,6 +140,8 @@ function startHeapMonitor(): void {
     // "last known heap state" breadcrumb regardless of where in the curve
     // we died.
     persist(LAST_HEAP_KEY, sample);
+    // Also persist the most recent GPU snapshot if the 3D scene is mounted.
+    if (lastGpuSnapshot) persist(LAST_GPU_KEY, lastGpuSnapshot);
 
     const ratio = usedJSHeapSize / jsHeapSizeLimit;
     if (ratio > WARN_RATIO && !warned) {
