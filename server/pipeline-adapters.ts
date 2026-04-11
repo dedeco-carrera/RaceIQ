@@ -3,7 +3,13 @@ import { insertSession, insertLap, getLaps, getTrackOutlineSectors } from "./db/
 import { getTuneAssignment } from "./db/tune-queries";
 import { wsManager } from "./ws";
 
-/** Shape captured per insertLap call in CapturingDbAdapter. Packet array is not stored. */
+export interface CapturedSession {
+  carOrdinal: number;
+  trackOrdinal: number;
+  gameId: GameId;
+  sessionType?: string;
+}
+
 export interface CapturedLap {
   sessionId: number;
   lapNumber: number;
@@ -13,6 +19,7 @@ export interface CapturedLap {
   tuneId: number | null;
   invalidReason: string | null;
   sectors: { s1: number; s2: number; s3: number } | null;
+  packets: TelemetryPacket[];
 }
 
 export interface DbAdapter {
@@ -88,7 +95,7 @@ export class RealWsAdapter implements WsAdapter {
 
 /** Captures insertSession/insertLap calls in-memory. Used in tests via parseDump. */
 export class CapturingDbAdapter implements DbAdapter {
-  readonly sessions: { carOrdinal: number; trackOrdinal: number; gameId: GameId; sessionType?: string }[] = [];
+  readonly sessions: CapturedSession[] = [];
   readonly laps: CapturedLap[] = [];
   private _sessionId = 0;
   private _lapId = 0;
@@ -98,8 +105,8 @@ export class CapturingDbAdapter implements DbAdapter {
     return Promise.resolve(++this._sessionId);
   }
 
-  insertLap(sessionId: number, lapNumber: number, lapTime: number, isValid: boolean, _packets: TelemetryPacket[], profileId: number | null, tuneId: number | null, invalidReason: string | null, sectors: { s1: number; s2: number; s3: number } | null): Promise<number> {
-    this.laps.push({ sessionId, lapNumber, lapTime, isValid, profileId, tuneId, invalidReason, sectors });
+  insertLap(sessionId: number, lapNumber: number, lapTime: number, isValid: boolean, packets: TelemetryPacket[], profileId: number | null, tuneId: number | null, invalidReason: string | null, sectors: { s1: number; s2: number; s3: number } | null): Promise<number> {
+    this.laps.push({ sessionId, lapNumber, lapTime, isValid, profileId, tuneId, invalidReason, sectors, packets });
     return Promise.resolve(++this._lapId);
   }
 
@@ -121,4 +128,23 @@ export class NullWsAdapter implements WsAdapter {
   broadcast(_packet: TelemetryPacket, _sectors?: LiveSectorData | null, _pit?: LivePitData | null): void {}
   broadcastNotification(_event: Record<string, unknown>): void {}
   broadcastDevState(_state: Record<string, unknown>): void {}
+}
+
+/** Capturing WebSocket adapter that records all events. Used in tests. */
+export class CapturingWsAdapter implements WsAdapter {
+  readonly broadcastedPackets: Array<{ packet: TelemetryPacket; sectors?: LiveSectorData | null; pit?: LivePitData | null }> = [];
+  readonly broadcastedNotifications: Record<string, unknown>[] = [];
+  readonly broadcastedDevStates: Record<string, unknown>[] = [];
+
+  broadcast(packet: TelemetryPacket, sectors?: LiveSectorData | null, pit?: LivePitData | null): void {
+    this.broadcastedPackets.push({ packet, sectors, pit });
+  }
+
+  broadcastNotification(event: Record<string, unknown>): void {
+    this.broadcastedNotifications.push(event);
+  }
+
+  broadcastDevState(state: Record<string, unknown>): void {
+    this.broadcastedDevStates.push(state);
+  }
 }
