@@ -122,9 +122,13 @@ export function TireTrails({
 
   // Release GPU instance buffer on unmount (R3F handles geometry + material
   // from JSX children, but not the InstancedMesh's own instance attributes).
+  // Capture the ref inside the effect body so the cleanup disposes the
+  // same instance we installed, not whatever the ref points to at
+  // teardown time.
   useEffect(() => {
+    const mesh = meshRef.current;
     return () => {
-      meshRef.current?.dispose();
+      mesh?.dispose();
     };
   }, []);
 

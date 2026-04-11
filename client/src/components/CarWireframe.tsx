@@ -58,12 +58,17 @@ export const CarWireframe = React.memo(function CarWireframe({
   const carModel = useMemo(() => {
     if (carModelProp) return carModelProp;
     if (isF1) return F1_CAR;
+    // Note: getCarModel reads from module-level state populated by
+    // loadCarModelConfigs(). configsLoaded is in the dep list so the
+    // memo re-runs once configs finish loading — eslint can't see the
+    // dependency because it's hidden behind an impure read.
     const perCar = getCarModel(carOrdinal ?? 0);
     if (perCar.hasModel) return perCar;
     // Fallback: any non-F1 game with no per-car GLB uses the Aston
     // Martin GT3 demo model. Previously this was FM-only, which left
     // ACC (and any future game) without a visible car in the scene.
     return DEMO_CAR;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carOrdinal, configsLoaded, isF1, carModelProp]);
   const units = useUnits();
   const { displaySettings } = useSettings();

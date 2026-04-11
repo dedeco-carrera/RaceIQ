@@ -122,11 +122,16 @@ export function CurbMarkers({
   }, [puddlePts, dummy]);
 
   // Dispose GPU resources on unmount. R3F handles child geometry/material,
-  // but the InstancedMesh itself keeps its own instance buffer.
+  // but the InstancedMesh itself keeps its own instance buffer. Capture
+  // the current refs at effect-run time so the cleanup sees the same
+  // instances we installed, not whatever React reconciles onto them
+  // during teardown.
   useEffect(() => {
+    const curb = curbRef.current;
+    const puddle = puddleRef.current;
     return () => {
-      curbRef.current?.dispose();
-      puddleRef.current?.dispose();
+      curb?.dispose();
+      puddle?.dispose();
     };
   }, []);
 
