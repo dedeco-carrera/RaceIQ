@@ -16,7 +16,6 @@ import {
 import {
   getTrackOutlineByOrdinal,
   getBundledOutlineByOrdinal,
-  hasTrackOutline,
   hasRecordedOutline as sharedHasRecordedOutline,
   getTrackSectorsByOrdinal,
   getStartYaw,
@@ -341,8 +340,7 @@ export const trackRoutes = new Hono()
       if (gameId === "acc") {
         const accTracks = getAccTracks();
         const tracks = Array.from(accTracks.entries()).map(([id, info]) => {
-          const hasExtracted = hasTrackOutline(id, "acc") || sharedHasRecordedOutline(id, "acc");
-          const hasShared = !!info.commonTrackName && !!loadSharedOutline(info.commonTrackName);
+          const hasBundled = !!getTrackOutlineByOrdinal(id, "acc", info.commonTrackName ?? undefined);
           return {
             ordinal: id,
             name: info.name,
@@ -350,8 +348,8 @@ export const trackRoutes = new Hono()
             country: "",
             variant: info.variant,
             lengthKm: 0,
-            hasOutline: hasExtracted || hasShared,
-            outlineSource: hasExtracted ? "recorded" : hasShared ? "tumftm" : null,
+            hasOutline: hasBundled,
+            outlineSource: hasBundled ? "bundled" : null,
             createdAt: null,
           };
         });
@@ -868,22 +866,24 @@ export const trackRoutes = new Hono()
       const startYaw = gameId ? getStartYaw(ordinal, gameId) : null;
       const altitude = getTrackAltitudeByOrdinal(ordinal);
 
+      const flipX = gameId === "acc";
+
       // Try all sources: bundled game data → computed average → DB → TUMFTM
       if (gameId) {
         const outline = getTrackOutlineByOrdinal(ordinal, gameId, sharedName);
-        if (outline) return c.json({ points: outline, recorded: true, source: "bundled", startYaw, ...(altitude && { altitude }) });
+        if (outline) return c.json({ points: outline, recorded: true, source: "bundled", startYaw, flipX, ...(altitude && { altitude }) });
       }
 
       // DB-recorded outlines (legacy/ACC)
       if (gameId) {
         const dbOutline = await getDbTrackOutline(ordinal, gameId as GameId);
-        if (dbOutline) return c.json({ points: dbOutline, recorded: true, source: "recorded", startYaw, ...(altitude && { altitude }) });
+        if (dbOutline) return c.json({ points: dbOutline, recorded: true, source: "recorded", startYaw, flipX, ...(altitude && { altitude }) });
       }
 
       // Shared outlines (cross-game TUMFTM) — fallback
       if (sharedName) {
         const shared = loadSharedOutline(sharedName);
-        if (shared) return c.json({ points: shared, recorded: false, source: "tumftm", startYaw });
+        if (shared) return c.json({ points: shared, recorded: false, source: "tumftm", startYaw, flipX });
       }
 
       return c.json({ error: "No outline available" }, 404);
@@ -930,7 +930,7 @@ export const trackRoutes = new Hono()
           rightEdge: extractedBoundaries.rightEdge,
           centerLine,
           pitLane: extractedBoundaries.pitLane,
-          coordSystem: validGameId === "f1-2025" ? "f1-2025" : "forza",
+          coordSystem: validGameId === "f1-2025" ? "f1-2025" : validGameId === "acc" ? "acc" : "forza",
         });
       }
 

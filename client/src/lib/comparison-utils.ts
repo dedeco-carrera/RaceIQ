@@ -38,6 +38,7 @@ export function drawTrackCanvas(
   followCar?: boolean,
   boundaries?: BoundaryData | null,
   telX?: (x: number) => number,
+  hideOutline?: boolean,
 ) {
   if (!telX) telX = (x) => x;
   ctx.clearRect(0, 0, w, h);
@@ -45,7 +46,7 @@ export function drawTrackCanvas(
   // Bounding box of outline (include boundary edges if available)
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   const allBoundSets: Point[][] = [outline];
-  if (boundaries && (boundaries.coordSystem === "forza" || boundaries.coordSystem === "f1-2025")) {
+  if (boundaries && (boundaries.coordSystem === "forza" || boundaries.coordSystem === "f1-2025" || boundaries.coordSystem === "acc")) {
     allBoundSets.push(boundaries.leftEdge, boundaries.rightEdge);
   }
   for (const pts of allBoundSets) {
@@ -96,7 +97,7 @@ export function drawTrackCanvas(
   }
 
   // Draw track boundary edges (track limits)
-  if (boundaries && (boundaries.coordSystem === "forza" || boundaries.coordSystem === "f1-2025")) {
+  if (boundaries && (boundaries.coordSystem === "forza" || boundaries.coordSystem === "f1-2025" || boundaries.coordSystem === "acc")) {
     const left = boundaries.leftEdge;
     const right = boundaries.rightEdge;
 
@@ -158,31 +159,33 @@ export function drawTrackCanvas(
     ctx.lineTo(sx, sy);
   };
 
-  // Outline thick
-  ctx.beginPath();
-  ctx.strokeStyle = "#334155";
-  ctx.lineWidth = zoom ? 6 : 5;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  drawOutlinePath();
-  ctx.stroke();
+  if (!hideOutline) {
+    // Outline thick
+    ctx.beginPath();
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = zoom ? 6 : 5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    drawOutlinePath();
+    ctx.stroke();
 
-  // Outline thin
-  ctx.beginPath();
-  ctx.strokeStyle = "#475569";
-  ctx.lineWidth = zoom ? 3 : 2;
-  drawOutlinePath();
-  ctx.stroke();
+    // Outline thin
+    ctx.beginPath();
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = zoom ? 3 : 2;
+    drawOutlinePath();
+    ctx.stroke();
 
-  // Start/finish marker
-  const [sx, sy] = toCanvas(outline[0].x, outline[0].z);
-  ctx.beginPath();
-  ctx.arc(sx, sy, zoom ? 5 : 4, 0, Math.PI * 2);
-  ctx.fillStyle = "#10b981";
-  ctx.fill();
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+    // Start/finish marker
+    const [sx, sy] = toCanvas(outline[0].x, outline[0].z);
+    ctx.beginPath();
+    ctx.arc(sx, sy, zoom ? 5 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#10b981";
+    ctx.fill();
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
 
   // Racing lines
   const drawRacingLine = (telemetry: TelemetryPacket[], color: string) => {
