@@ -255,6 +255,10 @@ initServerGameAdapters();
 - **PR/main**: GitHub Actions runs `bun test` and client build (`.github/workflows/build-test.yml`)
 - **Release tags**: Windows x64 binary compilation via `.github/workflows/release.yml` — Bun compiles server to `raceiq.exe`, bundles with Vite client output into `raceiq-windows-x64.zip`
 
+### Memory
+
+Project memory is stored in `.claude/memory/` in the repo root (not the default `~/.claude/projects/` path). This is version-controlled so all contributors share context. Read and write memory files there.
+
 ### Architecture Diagrams
 
 See `ARCHITECTURE.md` for detailed Mermaid diagrams covering: system overview, telemetry data flow, ingest pipeline detail, game adapter class diagram, AI analysis system, database schema (ER diagram), client architecture, server route modules, startup sequence, parser dispatch strategy, and comparison engine.

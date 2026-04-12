@@ -14,7 +14,7 @@ docs/superpowers/
 scripts/track-data/
 /.playwright-mcp
 /.superpowers
-/.claude
+/.claude/settings.local.json
 lighthouse-report.html
 test-results/
 .mastra/
