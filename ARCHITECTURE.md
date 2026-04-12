@@ -16,20 +16,22 @@ graph TB
         UDP[UDP Listener<br/>64MB buffer]
         SHM[Shared Memory Reader<br/>Windows only]
         Parser[Parser Dispatch<br/>Auto-detect game]
-        Pipeline[Telemetry Pipeline<br/>Normalize → Detect → Track → Broadcast]
-        LapDet[Lap Detector]
+        Pipeline[Telemetry Pipeline<br/>Normalize → Detect → Track → Calibrate → Broadcast]
+        LapDet[Lap Detector<br/>Per-game factory]
         SectorTrack[Sector Tracker]
         PitTrack[Pit Tracker]
-        WS[WebSocket Manager<br/>60Hz throttled broadcast]
-        API[Hono REST API]
+        TrackCal[Track Calibration<br/>~10Hz outline refinement]
+        WS[WebSocket Manager<br/>30Hz throttled broadcast]
+        API[Hono REST API<br/>11 route modules]
         DB[(SQLite + Drizzle)]
-        AI[Claude AI Analysis]
+        AI[AI Analysis<br/>Mastra agents + Claude API]
     end
 
     subgraph Client["Client (React 19 + Vite)"]
         Router[TanStack Router]
         TelStore[Telemetry Store<br/>Zustand]
         GameStore[Game Store<br/>Zustand]
+        UIStore[UI Store<br/>Zustand]
         Query[TanStack Query]
         UI[Dashboard Components]
     end
@@ -44,6 +46,7 @@ graph TB
     Pipeline --> LapDet
     Pipeline --> SectorTrack
     Pipeline --> PitTrack
+    Pipeline --> TrackCal
     Pipeline --> WS
     LapDet -- "Save laps" --> DB
     WS -- "WebSocket :3117/ws" --> TelStore
@@ -52,6 +55,7 @@ graph TB
     API --> AI
     TelStore --> UI
     GameStore --> UI
+    UIStore --> UI
     Query --> UI
     Router --> UI
 ```
@@ -65,6 +69,9 @@ sequenceDiagram
     participant Parse as Parser Dispatch
     participant Pipe as Pipeline
     participant Lap as Lap Detector
+    participant Sector as Sector Tracker
+    participant Pit as Pit Tracker
+    participant Cal as Track Calibration
     participant WS as WebSocket Manager
     participant Client as React Client
 
@@ -89,13 +96,133 @@ sequenceDiagram
         Lap->>Lap: Save to SQLite
     end
 
+    Pipe->>Sector: trackSectors(packet)
+    Pipe->>Pit: trackPitLane(packet)
+    Pipe->>Cal: calibrate(packet) ~10Hz
+
     Pipe->>+WS: broadcast(packet, sectors, pit)
     WS->>WS: Sample history (10Hz)
-    WS->>WS: Throttle (60Hz)
+    WS->>WS: Throttle (30Hz)
     WS-->>-Client: JSON via WebSocket
     Client->>Client: Zustand store update
     Client->>Client: React re-render
 ```
+
+## Data Ingest Pipeline (Detail)
+
+```mermaid
+flowchart TD
+    subgraph Ingestion["Packet Ingestion"]
+        UDP["UDP Socket<br/>0.0.0.0:5301<br/>64MB OS buffer"]
+        SHM["ACC Shared Memory<br/>Windows only<br/>Physics + Graphics + Static"]
+        Val{"≥29 bytes?<br/>IsRaceOn == 1?"}
+    end
+
+    subgraph Recording["Recording Mode (--record)"]
+        Rec["UdpRecorder<br/>Append to .bin file<br/>[uint32 len][N bytes]"]
+    end
+
+    subgraph Parsing["Parser Dispatch"]
+        Cache{"Cached game<br/>adapter?"}
+        Probe["Probe all adapters<br/>canHandle(buf)"]
+        RunCheck["getRunningGame()<br/>Process detection<br/>Every 5s"]
+        Parse["tryParse(buf, state)<br/>Game-specific parser"]
+    end
+
+    subgraph Pipeline["processPacket() Pipeline"]
+        Norm["1. Coordinate Normalization<br/>ACC: flip X for left-handed display"]
+        Susp["2. Suspension Fill<br/>Compute NormSuspensionTravel<br/>for F1/ACC"]
+        LD["3. Lap Detector<br/>Session + lap boundaries<br/>Rewind detection"]
+        ST["4. Sector Tracker<br/>Distance-fraction splits<br/>Estimated lap time vs reference"]
+        PT["5. Pit Tracker<br/>Fuel rolling avg (5 laps)<br/>Tire wear interpolation"]
+        TC["6. Track Calibration ~10Hz<br/>Procrustes alignment<br/>Forza coords ↔ outline coords"]
+        BC["7. WebSocket Broadcast<br/>30Hz throttle, 10Hz history sampling"]
+        Dev["8. Dev State Broadcast<br/>Debug overlay data"]
+    end
+
+    subgraph LapDetect["Lap Detection State Machine"]
+        SessStart["Session Start<br/>Car/track change or 30s gap"]
+        LapBound["Lap Boundary<br/>LapNumber increment or<br/>CurrentLap timer reset"]
+        Quality["Lap Quality Check<br/>≥30 packets, ≥100m distance<br/>±2s time match, no rewind"]
+        Save["Save to SQLite<br/>Packets + sector times + metadata"]
+    end
+
+    subgraph SectorDetail["Sector Tracking"]
+        DistFrac["Distance fraction<br/>= (dist - lapStart) / totalDist"]
+        SplitCalc["Live split times<br/>packet.CurrentLap - sectorStart"]
+        RefLap["Reference lap interpolation<br/>Binary search + linear interp"]
+        EstLap["Estimated lap time<br/>bestLap + (liveTime - refTime)"]
+    end
+
+    subgraph PitDetail["Pit Strategy"]
+        FuelAvg["Fuel: rolling avg 5 laps<br/>Outlier rejection (refuel ignored)"]
+        TireWear["Tires: distance-based interp<br/>Avg of 3 laps wear curve"]
+        Outlier["Reject: >2x avg duration (pit/SC)<br/><30% avg duration (cut/rewind)"]
+    end
+
+    subgraph Persist["Persistence"]
+        DB[(SQLite<br/>sessions, laps,<br/>trackOutlines)]
+        WS["WebSocket Clients<br/>30Hz JSON stream<br/>+ 600-sample history backfill"]
+    end
+
+    UDP --> Val
+    SHM --> Val
+    Val -- No --> Drop[Drop packet]
+    Val -- Yes --> Cache
+
+    Val -. "--record mode" .-> Rec
+
+    Cache -- Hit --> Parse
+    Cache -- Miss --> RunCheck
+    RunCheck -- Found --> Parse
+    RunCheck -- Not found --> Probe
+    Probe -- Match --> Parse
+    Probe -- None --> Drop
+
+    Parse -- "TelemetryPacket" --> Norm
+    Norm --> Susp
+    Susp --> LD
+    LD --> ST
+    ST --> PT
+    PT --> TC
+    TC --> BC
+    BC --> Dev
+
+    LD --> LapDetect
+    SessStart --> LapBound
+    LapBound --> Quality
+    Quality -- Valid --> Save
+    Quality -- Invalid --> Save
+
+    ST --> SectorDetail
+    DistFrac --> SplitCalc
+    SplitCalc --> RefLap
+    RefLap --> EstLap
+
+    PT --> PitDetail
+    FuelAvg --> Outlier
+    TireWear --> Outlier
+
+    Save --> DB
+    BC --> WS
+```
+
+### Pipeline Adapters (Testability)
+
+The pipeline uses dependency injection for DB and WebSocket access:
+
+| Interface | Production | Test |
+|-----------|-----------|------|
+| `DbAdapter` | `RealDbAdapter` — SQLite queries | `NullDbAdapter`, `CapturingDbAdapter` |
+| `WsAdapter` | `RealWsAdapter` — Bun WebSocket manager | `NullWsAdapter`, `CapturingWsAdapter` |
+
+### Pipeline Callbacks
+
+| Event | Trigger | Payload |
+|-------|---------|---------|
+| `onSessionStart` | Car/track change or 30s silence | `SessionState` |
+| `onLapComplete` | Lap boundary crossed | `packets[], lapTime, isValid` |
+| `onLapSaved` | Lap persisted to DB | `lapId, lapNumber, lapTime, sectors` |
 
 ## Game Adapter Pattern
 
@@ -110,9 +237,17 @@ classDiagram
         +coordSystem: string
         +steeringCenter: number
         +steeringRange: number
+        +carForwardOffset(yaw) [dx, dz]
+        +followViewRotation(yaw) number
+        +tireHealthThresholds: green, yellow
+        +tireTempThresholds: cold, warm, hot
+        +tirePressureOptimal?: min, max
+        +brakeTempThresholds?: front, rear
         +getCarName(ordinal) string
         +getTrackName(ordinal) string
         +getSharedTrackName(ordinal) string?
+        +carClassNames?: Record
+        +drivetrainNames?: Record
     }
 
     class ServerGameAdapter {
@@ -120,9 +255,10 @@ classDiagram
         +canHandle(buf) boolean
         +tryParse(buf, state) TelemetryPacket?
         +createParserState() unknown
+        +createLapDetector: LapDetectorFactory
         +aiSystemPrompt: string
-        +buildAiContext(packets) string
-        +processNames: string[]
+        +buildAiContext(packets) string?
+        +processNames?: string[]
     }
 
     GameAdapter <|-- ServerGameAdapter
@@ -130,6 +266,7 @@ classDiagram
     class ForzaAdapter {
         id = "fm-2023"
         coordSystem = "forza-lhz"
+        steeringCenter = 127
         Stateless parser
         Size-based detection
     }
@@ -137,6 +274,7 @@ classDiagram
     class F1Adapter {
         id = "f1-2025"
         coordSystem = "standard-xyz"
+        steeringCenter = 0
         Stateful accumulator
         Magic-bytes detection
     }
@@ -144,6 +282,7 @@ classDiagram
     class ACCAdapter {
         id = "acc"
         coordSystem = "standard-xyz"
+        steeringCenter = 0
         Shared memory reader
         Windows process detection
     }
@@ -174,6 +313,48 @@ classDiagram
     ServerRegistry --> ServerGameAdapter
 ```
 
+## AI Analysis System
+
+```mermaid
+graph TB
+    subgraph Providers["providers.ts"]
+        Claude[Claude API Client<br/>Streaming + Caching]
+    end
+
+    subgraph Agents["agents.ts — Mastra Agents"]
+        Analyst[Lap Analyst Agent]
+        CompareEng[Compare Engineer Agent]
+        ChatAgent[Chat Agent<br/>Interactive Q&A]
+    end
+
+    subgraph Prompts["System Prompts"]
+        AnalystP[analyst-prompt.ts<br/>Lap breakdown]
+        ChatP[chat-prompt.ts<br/>Single lap chat]
+        CompareP[compare-engineer.ts<br/>Head-to-head]
+        CompareChatP[compare-chat-prompt.ts<br/>Comparison chat]
+        InputsP[inputs-compare-prompt.ts<br/>Input-focused comparison]
+        CornerP[corner-data.ts<br/>Corner-by-corner]
+        TuneP[format-tune.ts<br/>Tune recommendations]
+    end
+
+    subgraph Cache["Database Cache"]
+        LapCache[(lapAnalyses<br/>Per-lap cache)]
+        CompCache[(compareAnalyses<br/>Per-pair cache)]
+    end
+
+    Providers --> Agents
+    AnalystP --> Analyst
+    ChatP --> ChatAgent
+    CompareP --> CompareEng
+    CompareChatP --> ChatAgent
+    InputsP --> CompareEng
+    CornerP --> Analyst
+    TuneP --> Analyst
+
+    Analyst --> LapCache
+    CompareEng --> CompCache
+```
+
 ## Database Schema
 
 ```mermaid
@@ -181,7 +362,7 @@ erDiagram
     profiles {
         integer id PK
         text name
-        integer createdAt
+        text createdAt
     }
 
     sessions {
@@ -190,7 +371,8 @@ erDiagram
         integer trackOrdinal
         text gameId
         text sessionType
-        integer createdAt
+        text notes
+        text createdAt
     }
 
     laps {
@@ -199,9 +381,17 @@ erDiagram
         integer lapNumber
         real lapTime
         integer isValid
+        text invalidReason
+        text notes
         integer profileId FK
+        integer pi
+        text carSetup "JSON — F1CarSetup snapshot"
         integer tuneId FK
+        real s1Time
+        real s2Time
+        real s3Time
         blob telemetry
+        text createdAt
     }
 
     tunes {
@@ -209,9 +399,19 @@ erDiagram
         text name
         text author
         integer carOrdinal
+        text category
         integer trackOrdinal
-        text settings
+        text description
+        text strengths
+        text weaknesses
+        text bestTracks
+        text strategies
+        text settings "JSON"
+        text unitSystem
         text source
+        text catalogId
+        text createdAt
+        text updatedAt
     }
 
     tuneAssignments {
@@ -225,8 +425,9 @@ erDiagram
         integer id PK
         integer trackOrdinal
         text gameId
-        blob outline
-        text sectors
+        blob outline "gzip'd JSON array"
+        text sectors "JSON — s1End, s2End"
+        text createdAt
     }
 
     trackCorners {
@@ -242,12 +443,28 @@ erDiagram
 
     lapAnalyses {
         integer id PK
-        integer lapId FK
+        integer lapId FK "unique"
         text analysis
-        integer tokens
-        real cost
-        real duration
+        integer inputTokens
+        integer outputTokens
+        real costUsd
+        integer durationMs
         text model
+        text createdAt
+    }
+
+    compareAnalyses {
+        integer id PK
+        integer lapAId "unique(a, b, kind)"
+        integer lapBId
+        text kind "default: inputs"
+        text analysis
+        integer inputTokens
+        integer outputTokens
+        real costUsd
+        integer durationMs
+        text model
+        text createdAt
     }
 
     sessions ||--o{ laps : "has"
@@ -263,10 +480,11 @@ erDiagram
 graph TB
     subgraph Routing["TanStack Router (file-based)"]
         Root["/ — Root Layout"]
-        Onboard["/onboarding — Setup Wizard"]
+        Onboard["Onboarding Wizard<br/>First-run setup"]
         FM23["/fm23 — Forza Motorsport"]
         F125["/f125 — F1 2025"]
         ACCRoute["/acc — ACC"]
+        Dev["/dev — Dev Tools"]
     end
 
     subgraph GamePages["Per-Game Pages (shared structure)"]
@@ -274,6 +492,7 @@ graph TB
         Sessions["/sessions — Session History"]
         Compare["/compare — Lap Comparison"]
         Analyse["/analyse — Lap Analysis"]
+        Chats["/chats — AI Chat Threads"]
         Tracks["/tracks — Track Maps"]
         Cars["/cars — Car Database"]
         Setup["/setup — Car Setup"]
@@ -282,9 +501,10 @@ graph TB
     end
 
     subgraph State["State Management"]
-        TS["telemetry.ts (Zustand)<br/>Live packet, connection, units"]
+        TS["telemetry.ts (Zustand)<br/>Live packet, connection, units,<br/>history arrays, server status"]
         GS["game.ts (Zustand)<br/>Active gameId, route prefix"]
-        TQ["TanStack Query<br/>Laps, sessions, tracks, tunes"]
+        US["ui.ts (Zustand)<br/>Settings modal, onboarding modal"]
+        TQ["TanStack Query<br/>Laps, sessions, tracks, tunes,<br/>settings, AI analyses"]
     end
 
     subgraph Comms["Server Communication"]
@@ -296,6 +516,7 @@ graph TB
     Root --> FM23
     Root --> F125
     Root --> ACCRoute
+    Root --> Dev
 
     FM23 --> GamePages
     F125 --> GamePages
@@ -305,9 +526,30 @@ graph TB
     RPC --> TQ
     TS --> Live
     GS --> Routing
+    US --> Root
     TQ --> Sessions
     TQ --> Compare
     TQ --> Analyse
+    TQ --> Chats
+```
+
+## Server Route Modules
+
+```mermaid
+graph LR
+    subgraph Routes["routes.ts — Hono App Composition"]
+        Laps[lap-routes.ts<br/>Lap CRUD, telemetry, GIF]
+        Sessions[session-routes.ts<br/>Session CRUD]
+        Tracks[track-routes.ts<br/>Outlines, sectors, corners]
+        Cars[car-routes.ts<br/>Car catalog]
+        Tunes[tune-routes.ts<br/>Tune management]
+        Settings[settings-routes.ts<br/>User preferences]
+        ChatsR[chats-routes.ts<br/>AI chat threads]
+        ACC[acc-routes.ts<br/>ACC setups, shared memory]
+        F125R[f125-routes.ts<br/>F1-specific APIs]
+        Misc[misc-routes.ts<br/>Export, comparison, status]
+        DevR[dev-routes.ts<br/>Debug endpoints, dev only]
+    end
 ```
 
 ## Server Startup Sequence
@@ -317,17 +559,27 @@ sequenceDiagram
     participant Main as index.ts
     participant GA as Game Adapters
     participant DB as Database
+    participant Settings as Settings
+    participant HTTP as Bun.serve
     participant UDP as UDP Listener
     participant SHM as Shared Memory
     participant Tray as System Tray
-    participant HTTP as Bun.serve
 
+    Main->>Main: process.title = "RaceIQ"
     Main->>GA: initGameAdapters()
     Main->>GA: initServerGameAdapters()
-    Main->>DB: Initialize SQLite + Drizzle
+    Main->>DB: Initialize SQLite + run migrations
+    Main->>Settings: Load settings.json
+    Main->>DB: Clean up empty sessions
+
+    opt macOS
+        Main->>Main: Spawn caffeinate -i (prevent sleep)
+    end
+
+    Main->>Main: Kill stale processes on HTTP_PORT
     Main->>HTTP: Bun.serve({ port: 3117 })
     Note over HTTP: HTTP + WebSocket upgrade at /ws
-    Main->>UDP: udpListener.start(5300)
+    Main->>UDP: udpListener.start(settings.udpPort)
     Note over UDP: 64MB OS receive buffer
 
     opt Windows
@@ -337,6 +589,10 @@ sequenceDiagram
 
     opt First run
         Main->>Main: Open browser to localhost:3117
+    end
+
+    opt --record flag
+        Main->>Main: Record raw packets to bin file<br/>(bypasses WS + DB pipeline)
     end
 ```
 
@@ -361,4 +617,42 @@ flowchart TD
     I --> M
     K --> M
     M --> N[processPacket pipeline]
+```
+
+## Comparison Engine
+
+```mermaid
+flowchart LR
+    A[Lap A telemetry] --> C[Distance-grid alignment<br/>1-meter interpolation]
+    B[Lap B telemetry] --> C
+    C --> D[AlignedTrace<br/>speed, throttle, brake,<br/>steering, RPM per meter]
+    D --> E[Corner deltas]
+    D --> F[Sector splits]
+    D --> G[AI inputs analysis<br/>cached in compareAnalyses]
+```
+
+## ACC Adapter Detail
+
+```mermaid
+graph TB
+    subgraph ACC["ACC Game Adapter (Windows)"]
+        Proc[Process Checker<br/>acc.exe detection]
+        SHM[Shared Memory Reader<br/>Physics + Graphics + Static]
+        Buf[Buffered Memory Reader]
+        Structs[Struct Definitions<br/>C memory layouts]
+        Trip[Triplet Pipeline<br/>Multi-packet assembly]
+        Asm[Triplet Assembler]
+        Parse[ACC Parser]
+        Rec[Recorder<br/>Bin file capture]
+        Extract[Track Extractor<br/>Outline from telemetry]
+    end
+
+    Proc --> SHM
+    SHM --> Buf
+    Buf --> Structs
+    Structs --> Trip
+    Trip --> Asm
+    Asm --> Parse
+    Parse --> Rec
+    SHM --> Extract
 ```

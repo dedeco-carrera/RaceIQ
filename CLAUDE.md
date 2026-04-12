@@ -32,15 +32,26 @@ bun run build
 # Run production build
 bun run start
 
+# Build Windows installer
+bun run build:installer
+
 # Client-specific
 cd client && bun run build   # production build (tsc + vite)
 cd client && bun run lint    # ESLint
 
+# Dump mode (develop without a running game — captures raw packets)
+bun run dev:dump:fm            # dump Forza Motorsport packets
+bun run dev:dump:f1            # dump F1 2025 packets
+bun run dev:dump:acc           # dump ACC packets
+
+# AI development (Mastra agent playground)
+bun run mastra:dev             # starts Mastra dev UI at localhost:4111
+
 # Utility scripts
-bun run extract:tracks       # extract track data from game files
-bun run laps:export          # export lap data
-bun run laps:import          # import lap data
-bun run lighthouse           # run Lighthouse audit on local dev server
+bun run extract:tracks         # extract track data from game files
+bun run laps:export            # export lap data
+bun run laps:import            # import lap data
+bun run lighthouse             # run Lighthouse audit on local dev server
 ```
 
 ### Environment Variables
@@ -61,14 +72,18 @@ bun run lighthouse           # run Lighthouse audit on local dev server
 - `server/parsers/` — Game-specific binary packet parsers (dispatched via game adapter registry)
 - `server/games/` — Server game adapters (parser binding, AI prompts) — see [Adding a New Game](#adding-a-new-game)
 - `server/routes.ts` — Hono app composition; individual route files live in `server/routes/` (laps, sessions, settings, cars, tracks, tunes, ACC, F1 2025, misc)
-- `server/ws.ts` — WebSocket manager, broadcasts parsed packets to all connected clients
-- `server/lap-detector.ts` — Detects lap boundaries from telemetry stream
+- `server/ws.ts` — WebSocket manager, 30Hz throttled broadcast to all connected clients
+- `server/pipeline.ts` — Telemetry processing pipeline (normalize → suspension fill → lap detect → sector track → pit track → track calibration → broadcast)
+- `server/lap-detector.ts` — Detects lap boundaries from telemetry stream (per-game factory via adapter)
+- `server/sector-tracker.ts` — Server-side sector timing (distance-fraction splits, estimated lap time vs reference)
 - `server/corner-detection.ts` — Identifies racing corners from telemetry data (game-aware steering)
-- `server/ai/analyst-prompt.ts` — Builds prompts for Claude API lap analysis
-- `server/db/schema.ts` — Drizzle ORM schema (profiles, sessions, laps, corners, lapAnalyses, trackOutlines)
+- `server/ai/` — AI analysis system (see [AI Analysis System](#ai-analysis-system))
+- `server/db/schema.ts` — Drizzle ORM schema (profiles, sessions, laps, corners, lapAnalyses, compareAnalyses, trackOutlines)
 - `server/db/queries.ts` — Database query helpers
 - `server/db/migrations.ts` — Hand-rolled migration list (SQL array, version-tracked)
 - `server/db/index.ts` — Runs migrations on startup via custom runner
+- `server/tray.ts` — System tray integration (Windows)
+- `server/update-check.ts` — Auto-update checker
 
 ### Database migration approach
 
@@ -78,17 +93,35 @@ Drizzle is used **only as a query builder and type-safe schema reference** — N
 1. Edit `server/db/schema.ts` (keeps Drizzle types in sync)
 2. Add a new entry at the bottom of `server/db/migrations.ts` with the next version number and the raw SQL
 3. Do NOT use `bun run db:push` to apply schema changes — it is for dev introspection only and must never drop `schema_migrations` (protected via `tablesFilter` in `drizzle.config.ts`)
-- `server/pipeline.ts` — Telemetry processing pipeline (parse → broadcast → lap detect)
-- `server/sector-tracker.ts` — Server-side sector timing tracker
-- `server/tray.ts` — System tray integration (Windows)
-- `server/update-check.ts` — Auto-update checker
+
+### Pipeline dependency injection
+
+The pipeline uses `DbAdapter` and `WsAdapter` interfaces for testability:
+- Production: `RealDbAdapter` (SQLite), `RealWsAdapter` (Bun WebSocket)
+- Tests: `NullDbAdapter`/`NullWsAdapter` (no-op) or `CapturingDbAdapter`/`CapturingWsAdapter` (record calls)
+
+### AI Analysis System
+
+The AI system uses Mastra agents backed by Claude API with streaming and prompt caching.
+
+**Agents** (`server/ai/agents.ts`):
+- Lap Analyst — single-lap breakdown with corner-by-corner analysis
+- Compare Engineer — head-to-head lap comparison (inputs-focused)
+- Chat Agent — interactive Q&A about laps and comparisons
+
+**Prompt files** (`server/ai/`): `analyst-prompt.ts`, `chat-prompt.ts`, `compare-engineer.ts`, `compare-chat-prompt.ts`, `inputs-compare-prompt.ts`, `corner-data.ts`, `format-tune.ts`
+
+**Mastra directory** (`mastra/`): Agent definitions for the Mastra dev playground (`bun run mastra:dev`). Mirrors `server/ai/agents.ts` for local testing.
+
+**Caching**: Analysis results cached in DB (`lapAnalyses` for single laps, `compareAnalyses` for lap pairs with a `kind` discriminator).
 
 **Client (React 19 + Vite + TanStack Router)**
 - `client/src/main.tsx` — App entry point
 - `client/src/routes/__root.tsx` — Root layout with TanStack Router
 - `client/src/routeTree.gen.ts` — Auto-generated route tree (do not edit manually)
-- `client/src/stores/telemetry.ts` — Zustand store for WebSocket connection state, current packet, packets/sec
+- `client/src/stores/telemetry.ts` — Zustand store for WebSocket connection state, current packet, packets/sec, live history arrays
 - `client/src/stores/game.ts` — Zustand store for active game context (gameId → route mapping)
+- `client/src/stores/ui.ts` — Zustand store for UI state (settings modal, onboarding)
 - Key components:
   - `LiveTelemetry.tsx` — Real-time telemetry dashboard
   - `LapAnalyse.tsx` — Lap analysis with corner data
@@ -121,11 +154,14 @@ Drizzle is used **only as a query builder and type-safe schema reference** — N
 - Path aliases: `@shared/*` → `./shared/*` (server/test), `@/*` → `./src/*` (client only)
 - Client proxies `/api` and `/ws` requests to `localhost:3117` via Vite dev server config
 - **API calls use Hono RPC**: import `client` from `@/lib/rpc.ts` (typed against `AppType` from `server/routes.ts`) — do not use raw `fetch` for API routes
+- **gameId travels via `X-Game-Id` header** — not query params or effect-populated stores
 - Database file: `data/forza-telemetry.db` (SQLite)
 - Settings persisted to: `data/settings.json`
 - UI components use shadcn (in `client/src/components/ui/`) with Tailwind CSS v4
 - Client uses TanStack React Query for server state management
 - 3D visualizations use React Three Fiber (Three.js wrapper for React)
+- **Never fall back to "fm-2023"** when gameId is missing — make gameId required
+- Prefer static `import` at top of file over `await import(...)` — don't copy existing dynamic-import patterns
 
 ### Custom Steering Wheels
 
@@ -194,6 +230,12 @@ To add support for a new racing game (e.g. Gran Turismo):
 
 See existing adapters (`fm-2023`, `f1-2025`, `acc`) for reference. Everything else (navigation tabs, car/track name resolution, corner detection, AI prompts, parser dispatch) is handled automatically by the registry.
 
+### Pre-commit Hooks (Lefthook)
+
+Installed via `postinstall` script. Runs in parallel on staged client files:
+- **lint** — ESLint on staged `client/src/**/*.{ts,tsx}`
+- **typecheck** — full client build (`cd client && bun run build`)
+
 ### Testing
 
 Tests live in `test/` and use Bun's native test runner (`bun:test` with `describe`/`test`/`expect`). Tests that involve packet parsing must initialize game adapters first:
@@ -206,8 +248,18 @@ initGameAdapters();
 initServerGameAdapters();
 ```
 
+**Known issue**: ACC shared memory tests fail on macOS due to `@libsql/client` module resolution (Windows-only feature).
+
 ### CI/CD
 
 - **PR/main**: GitHub Actions runs `bun test` and client build (`.github/workflows/build-test.yml`)
 - **Release tags**: Windows x64 binary compilation via `.github/workflows/release.yml` — Bun compiles server to `raceiq.exe`, bundles with Vite client output into `raceiq-windows-x64.zip`
+
+### Memory
+
+Project memory is stored in `.claude/memory/` in the repo root (not the default `~/.claude/projects/` path). This is version-controlled so all contributors share context. Read and write memory files there.
+
+### Architecture Diagrams
+
+See `ARCHITECTURE.md` for detailed Mermaid diagrams covering: system overview, telemetry data flow, ingest pipeline detail, game adapter class diagram, AI analysis system, database schema (ER diagram), client architecture, server route modules, startup sequence, parser dispatch strategy, and comparison engine.
 
