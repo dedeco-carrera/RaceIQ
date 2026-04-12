@@ -100,11 +100,8 @@ export class AccSharedMemoryReader {
     this._pipeline.register(new StatusCheckProcessor(this._disconnect.bind(this)));
 
     if (this._recordingOnly) {
-      this._pipeline.register(
-        new DumpToBinProcessor(accRecorder),
-        new ParsingProcessor(this._carOrdinal, this._trackOrdinal, accRecorder),
-      );
-      console.log("[ACC] Triplet pipeline: StatusCheckProcessor → DumpToBinProcessor → ParsingProcessor");
+      this._pipeline.register(new DumpToBinProcessor(accRecorder));
+      console.log("[ACC] Triplet pipeline: StatusCheckProcessor → DumpToBinProcessor");
     } else {
       this._pipeline.register(new ParsingProcessor(this._carOrdinal, this._trackOrdinal, accRecorder));
       console.log("[ACC] Triplet pipeline: StatusCheckProcessor → ParsingProcessor");

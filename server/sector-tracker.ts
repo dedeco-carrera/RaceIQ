@@ -42,7 +42,6 @@ export class SectorTracker {
   private refLap: ReferenceLap | null = null;
   private currentTrackOrdinal = -1;
   private currentCarOrdinal = -1;
-  private currentGameId: GameId = "fm-2023";
 
   /** Reset for a new session — loads sector boundaries and track length. */
   async reset(trackOrdinal: number, gameId: GameId, carOrdinal: number = -1): Promise<void> {
@@ -62,7 +61,6 @@ export class SectorTracker {
     this.refLap = null;
     this.currentTrackOrdinal = trackOrdinal;
     this.currentCarOrdinal = carOrdinal;
-    this.currentGameId = gameId;
 
     // Load sector boundaries: DB → shared meta → bundled fallback
     const adapter = tryGetGame(gameId);
@@ -132,15 +130,9 @@ export class SectorTracker {
         // bestLapTime is only updated from valid laps (via updateRefLap / seeding)
       }
 
-      // Refine track length from actual completed distance.
-      // For ACC/AC Evo: guard against pit laps — their short completedDist would
-      // corrupt lapDistTotal and make sector fractions fire too early on the
-      // following lap (e.g. S3 before turn 2 on the outlap).
-      // Other games don't have this issue so always refine for them.
+      // Refine track length from actual completed distance
       const completedDist = packet.DistanceTraveled - this.lapDistStart;
-      const isSharedMemoryGame = this.currentGameId === "acc" || this.currentGameId === "ac-evo";
-      const minPlausibleLap = isSharedMemoryGame && this.bounds ? this.bounds.trackLength * 0.5 : 100;
-      if (completedDist > minPlausibleLap) {
+      if (completedDist > 100) {
         this.lapDistTotal = completedDist;
       }
 
@@ -151,19 +143,8 @@ export class SectorTracker {
     }
     this.lastLap = packet.LapNumber;
 
-    // Sector boundary detection.
-    // For ACC/AC Evo: use the game's own currentSectorIndex — it's track-position-based
-    // and accurate regardless of where in the lap the recording started.
-    // For other games: fall back to distance-fraction against lapDistTotal.
-    const isSharedMemoryGame = this.currentGameId === "acc" || this.currentGameId === "ac-evo";
-    if (isSharedMemoryGame && packet.acc?.currentSectorIndex !== undefined) {
-      const idx = packet.acc.currentSectorIndex; // 0, 1, or 2
-      if (idx > this.currentSector) {
-        this.currentTimes[this.currentSector] = packet.CurrentLap - this.sectorStartTime;
-        this.sectorStartTime = packet.CurrentLap;
-        this.currentSector = idx;
-      }
-    } else if (this.lapDistTotal > 0) {
+    // Sector boundary detection
+    if (this.lapDistTotal > 0) {
       const lapDist = packet.DistanceTraveled - this.lapDistStart;
       const frac = lapDist / this.lapDistTotal;
 

@@ -1,6 +1,5 @@
 import { useTelemetryStore } from "../../stores/telemetry";
 import { tryGetGame } from "@shared/games/registry";
-import type { GameId } from "@shared/types";
 import { TireGrid } from "../telemetry/TireGrid";
 import { LapTimeChart } from "../LapTimeChart";
 import { PitEstimate } from "../telemetry/PitEstimate";
@@ -11,13 +10,13 @@ import { RaceInfo } from "../RaceInfo";
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
-export function AccLiveDashboard({ gameId = "acc" }: { gameId?: GameId }) {
+export function AccLiveDashboard() {
   const packet = useTelemetryStore((s) => s.packet);
   const { data: trackName } = useTrackName(packet?.TrackOrdinal);
   const { data: carName } = useCarName(packet?.CarOrdinal);
-  const pressureOptimal = useTirePressureOptimal(gameId, packet?.CarOrdinal);
+  const pressureOptimal = useTirePressureOptimal("acc", packet?.CarOrdinal);
 
-  if (!packet || packet.gameId !== gameId) {
+  if (!packet || packet.gameId !== "acc") {
     return (
       <div className="flex-1 flex flex-col">
         <NoDataView />
@@ -36,10 +35,10 @@ export function AccLiveDashboard({ gameId = "acc" }: { gameId?: GameId }) {
             fr={{ tempC: packet.TireTempFR, wear: packet.TireWearFR, brakeTemp: packet.BrakeTempFrontRight ?? 0, brakePadMm: packet.acc?.brakePadWear[1], pressure: packet.TirePressureFrontRight ?? 0 }}
             rl={{ tempC: packet.TireTempRL, wear: packet.TireWearRL, brakeTemp: packet.BrakeTempRearLeft ?? 0, brakePadMm: packet.acc?.brakePadWear[2], pressure: packet.TirePressureRearLeft ?? 0 }}
             rr={{ tempC: packet.TireTempRR, wear: packet.TireWearRR, brakeTemp: packet.BrakeTempRearRight ?? 0, brakePadMm: packet.acc?.brakePadWear[3], pressure: packet.TirePressureRearRight ?? 0 }}
-            healthThresholds={tryGetGame(gameId)?.tireHealthThresholds ?? { green: 0.85, yellow: 0.70 }}
+            healthThresholds={tryGetGame("acc")?.tireHealthThresholds ?? { green: 0.85, yellow: 0.70 }}
             tempThresholds={{ blue: 70, orange: 100, red: 110 }}
             pressureOptimal={pressureOptimal}
-            brakeTempThresholds={tryGetGame(gameId)?.brakeTempThresholds}
+            brakeTempThresholds={tryGetGame("acc")?.brakeTempThresholds}
             compound={packet.acc?.tireCompound}
           />
         </div>

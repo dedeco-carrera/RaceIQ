@@ -36,12 +36,6 @@ export class LapDetectorV2 implements ILapDetector {
   // Flag: if true, discard the next reset (recording started mid-lap)
   private firstLapIsPartial = false;
 
-  // Duplicate-emit guard: TripletAssembler's setInterval fires at 100Hz without
-  // waiting for the previous async callback. If emitLap is still awaiting DB writes
-  // when the next tick arrives, the same lap could be saved twice. Track the last
-  // emitted lap number — if emitLap is triggered again for the same number, ignore it.
-  private _lastEmittedLapNumber = -1;
-
   constructor(opts: LapDetectorOptions | LapDetectorV2Options) {
     // Support both unified LapDetectorOptions and legacy LapDetectorV2Options
     if ("callbacks" in opts || !("onLapSaved" in opts && "db" in opts && !("callbacks" in opts))) {
@@ -104,20 +98,17 @@ export class LapDetectorV2 implements ILapDetector {
 
     if (isReset) {
       if (this.firstLapIsPartial) {
-        // Recording started mid-lap. Evaluate whether to discard the opening segment:
-        //  1. Trivial fragment (<100m) — timer glitch, skip and wait for the next reset.
-        //  2. Pit-only segment — recording started while the car was stationary in the pit
-        //     box; the entire buffer never left the pit, so it contributes nothing useful.
-        //     Discard it so the outlap becomes lap 0.
-        // Otherwise clear the flag and let normal emission run.
+        // Recording started mid-lap. If the buffer is a trivial timer-glitch
+        // fragment (< 100m of distance), skip it entirely and keep the flag
+        // set so the NEXT reset (the real lap) is the one we emit. Otherwise
+        // clear the flag and let normal emission run — the pit-lane rule in
+        // emitLap will mark it as "outlap" if the lap started in the pit.
         const bufStart = this.lapBuffer[0]?.DistanceTraveled ?? 0;
         const bufEnd = this.lapBuffer[this.lapBuffer.length - 1]?.DistanceTraveled ?? 0;
         const bufDist = bufEnd - bufStart;
-        const isPitOnly = classifyAccPitLap(this.lapBuffer) === "pit lap";
-        if (bufDist < 100 || isPitOnly) {
+        if (bufDist < 100) {
           this.lapBuffer = [];
           this.peakCurrentLap = 0;
-          this.firstLapIsPartial = false;
           this.lapBuffer.push(packet);
           if (packet.CurrentLap > this.peakCurrentLap) this.peakCurrentLap = packet.CurrentLap;
           return;
@@ -154,18 +145,7 @@ export class LapDetectorV2 implements ILapDetector {
   ): Promise<void> {
     const lapTime = this.peakCurrentLap;
     const lapNum = this.currentLapNumber;
-
-    if (lapNum === this._lastEmittedLapNumber) return;
-    this._lastEmittedLapNumber = lapNum;
-
-    // Snapshot and reset synchronously before any await. Without this, packets
-    // arriving during the async window (computeLapSectors / insertLap) would be
-    // pushed into the same array that `packets` references, bleeding the next
-    // lap's data into this lap's saved packet buffer.
     const packets = this.lapBuffer;
-    this.lapBuffer = [];
-    this.peakCurrentLap = 0;
-    this.currentLapNumber = lapNum + 1;
 
     const quality = assessLapRecording(packets, lapTime);
     let isValid = forcedInvalidReason ? false : quality.valid;
@@ -222,5 +202,9 @@ export class LapDetectorV2 implements ILapDetector {
         sectors,
       });
     }
+
+    this.currentLapNumber = lapNum + 1;
+    this.lapBuffer = [];
+    this.peakCurrentLap = 0;
   }
 }
