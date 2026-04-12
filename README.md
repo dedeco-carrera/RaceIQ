@@ -5,7 +5,7 @@
 <h1 align="center">RaceIQ</h1>
 
 <p align="center">
-  Real-time racing telemetry dashboard, lap analysis and catalogue for <strong>Forza Motorsport 2023</strong>, <strong>F1 2025</strong>, and <strong>Assetto Corsa Competizione</strong>.
+  Real-time racing telemetry dashboard, lap analysis and catalogue for <strong>Forza Motorsport 2023</strong>, <strong>F1 2025</strong>, <strong>Assetto Corsa Competizione</strong>, and <strong>Assetto Corsa Evo</strong>.
 </p>
 
 <p align="center">
@@ -41,11 +41,12 @@ Check out the [demo](https://www.youtube.com/watch?v=hWuIItofivA) and [screensho
 
 ## Supported Games
 
-| Game | Cars | Tunes |
-|------|------|-------|
-| Forza Motorsport 2023 | Yes | No |
-| F1 2025 | Yes | Yes |
-| Assetto Corsa Competizione | Yes | Yes |
+| Game | Community Tunes | Community Guides | Tune Creator |
+|------|-----------------|-----------------|--------------|
+| Forza Motorsport 2023 | No | No | Yes |
+| F1 2025 | Yes | Yes | No |
+| Assetto Corsa Competizione | Yes | Yes | No |
+| Assetto Corsa Evo | No | No | No |
 
 ## Getting Started
 
