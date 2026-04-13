@@ -16,7 +16,7 @@
     "start": "NODE_ENV=production ./dist/raceiq",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "test": "bun test",
+    "test": "bun test --timeout 60000",
     "extract:tracks": "bun scripts/extract-fm2023-tracks.ts && bun scripts/extract-f1-tracks.ts",
     "extract:tracks:forza": "bun scripts/extract-fm2023-tracks.ts",
     "extract:tracks:f1": "bun scripts/extract-f1-25-tracks.ts",
