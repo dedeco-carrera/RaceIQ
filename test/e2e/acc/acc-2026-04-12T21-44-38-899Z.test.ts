@@ -20,7 +20,7 @@ describe(recordingFile, () => {
     // Raw recording started in pit box — confirms discard logic fired correctly
     expect(rawPackets[0].acc?.pitStatus).not.toBe("out");
 
-    // 3 laps: outlap + valid + incomplete (17-min pit-only opening segment discarded)
+    // 3 laps: outlap + valid + incomplete (pit-only opening segment discarded)
     expect(laps.length).toBe(3);
 
     // Lap 0: outlap (was lap 1 before the pit-only opening segment was discarded)
