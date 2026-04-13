@@ -1,10 +1,8 @@
-console.log = () => {};
 import { describe, test, expect } from "bun:test";
 import { existsSync } from "fs";
 import { join } from "path";
 import { parseDump } from "../../helpers/parse-dump";
 import { generateRecordingVisualizations } from "../../helpers/lap-viz";
-import { TestLogger } from "../../helpers/test-logger";
 import { assertBrandHatchSectorBounds, lapSummary, RECORDINGS_DIR } from "./shared";
 
 const recordingFile = "acc-2026-04-09T18-56-49-633Z.bin.gz";
@@ -14,11 +12,10 @@ describe(recordingFile, () => {
   test("4 laps: outlap + 2 valid + incomplete tail", async () => {
     if (!existsSync(recording)) return;
 
-    const log = new TestLogger(recordingFile);
     const { laps, carModel, trackName, rawPackets } = await parseDump("acc", recording);
 
-    log.log(`v2 detected ${laps.length} lap(s)`);
-    for (const l of laps) log.log(lapSummary(l));
+    console.log(`v2 detected ${laps.length} lap(s)`);
+    for (const l of laps) console.log(lapSummary(l));
     generateRecordingVisualizations(recordingFile, laps, rawPackets);
 
     expect(carModel).toBe("mclaren_720s_gt3_evo");
@@ -50,6 +47,5 @@ describe(recordingFile, () => {
     // Lap 3: incomplete tail
     expect(laps[3].isValid).toBe(false);
     expect(laps[3].invalidReason).toBe("incomplete");
-    log.flush();
   });
 });

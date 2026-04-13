@@ -1,3 +1,4 @@
 [test]
 root = "./test"
 timeout = 120000
+maxConcurrency = 1

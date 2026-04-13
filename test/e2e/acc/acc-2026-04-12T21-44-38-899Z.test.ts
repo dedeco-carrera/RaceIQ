@@ -1,9 +1,7 @@
-console.log = () => {};
 import { describe, test, expect } from "bun:test";
 import { existsSync } from "fs";
 import { join } from "path";
 import { parseDump } from "../../helpers/parse-dump";
-import { TestLogger } from "../../helpers/test-logger";
 import { assertBrandHatchSectorBounds, lapSummary, RECORDINGS_DIR } from "./shared";
 
 const recordingFile = "acc-2026-04-12T21-44-38-899Z.bin.gz";
@@ -13,9 +11,8 @@ describe(recordingFile, () => {
   test("pit-only opening segment discarded, outlap is lap 0", async () => {
     if (!existsSync(recording)) return;
 
-    const log = new TestLogger(recordingFile);
     const { laps, rawPackets } = await parseDump("acc", recording);
-    for (const l of laps) log.log(lapSummary(l));
+    for (const l of laps) console.log(lapSummary(l));
 
     // Raw recording started in pit box — confirms discard logic fired correctly
     expect(rawPackets[0].acc?.pitStatus).not.toBe("out");
@@ -36,6 +33,5 @@ describe(recordingFile, () => {
     // Lap 2: incomplete tail
     expect(laps[2].isValid).toBe(false);
     expect(laps[2].invalidReason).toBe("incomplete");
-    log.flush();
   });
 });

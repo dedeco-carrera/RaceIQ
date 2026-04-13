@@ -1,10 +1,8 @@
-console.log = () => {};
 import { describe, test, expect } from "bun:test";
 import { existsSync } from "fs";
 import { join } from "path";
 import { parseDump } from "../../helpers/parse-dump";
 import { generateRecordingVisualizations } from "../../helpers/lap-viz";
-import { TestLogger } from "../../helpers/test-logger";
 import { assertSectorTimesMatchLapTime, assertLapTimesProper } from "../../helpers/lap-assertions";
 import type { LapSavedNotification } from "../../../server/lap-detector";
 import { assertBrandHatchSectorBounds, lapSummary, RECORDINGS_DIR } from "./shared";
@@ -16,12 +14,11 @@ describe(recordingFile, () => {
   test("5 laps: outlap + 3 valid + incomplete tail", async () => {
     if (!existsSync(recording)) return;
 
-    const log = new TestLogger(recordingFile);
     const { laps, wsNotifications, rawPackets } = await parseDump("acc", recording);
     const lapSaved = wsNotifications.filter((n): n is LapSavedNotification => n.type === "lap-saved");
 
-    log.log(`v2 detected ${laps.length} lap(s)`);
-    for (const l of laps) log.log(lapSummary(l));
+    console.log(`v2 detected ${laps.length} lap(s)`);
+    for (const l of laps) console.log(lapSummary(l));
     generateRecordingVisualizations(recordingFile, laps, rawPackets);
 
     expect(laps.length).toBe(5);
@@ -73,7 +70,5 @@ describe(recordingFile, () => {
     expect(lapSaved[2].isValid).toBe(true);
     expect(lapSaved[3].lapNumber).toBe(3);
     expect(lapSaved[3].isValid).toBe(true);
-
-    log.flush();
   });
 });
