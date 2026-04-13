@@ -239,8 +239,9 @@ function ErsSection({ f1 }: { f1: F1ExtendedData }) {
         <h2 className="text-[10px] font-semibold text-app-text-muted uppercase tracking-wider">Electronics</h2>
       </div>
       <div className="p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <DrsIndicator f1={f1} />
+        <DrsIndicator f1={f1} />
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <span className="text-[10px] text-app-text-muted uppercase tracking-wider">ERS</span>
           <div className="flex items-center gap-1.5">
             <span className={`text-sm font-bold px-2 py-0.5 rounded bg-zinc-700 tabular-nums ${barColor.replace("bg-", "text-")}`}>{pct.toFixed(0)}%</span>
             <span className={`text-sm font-bold px-2 py-0.5 rounded bg-zinc-700 ${mode.color}`}>{mode.label}</span>
