@@ -243,7 +243,7 @@ function ErsSection({ f1 }: { f1: F1ExtendedData }) {
           <DrsIndicator f1={f1} />
           <div className="flex items-center gap-1.5">
             <span className={`text-sm font-bold px-2 py-0.5 rounded bg-zinc-700 tabular-nums ${barColor.replace("bg-", "text-")}`}>{pct.toFixed(0)}%</span>
-            {mode.label !== "NONE" && <span className={`text-sm font-bold px-2 py-0.5 rounded bg-zinc-700 ${mode.color}`}>{mode.label}</span>}
+            <span className={`text-sm font-bold px-2 py-0.5 rounded bg-zinc-700 ${mode.color}`}>{mode.label}</span>
           </div>
         </div>
         <div className="h-2 rounded-full overflow-hidden">
