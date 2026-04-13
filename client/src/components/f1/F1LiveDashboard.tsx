@@ -72,25 +72,24 @@ export function F1LiveDashboard() {
     <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 h-full">
       {/* Left column: Core telemetry + pit info */}
       <div className="border-r border-app-border overflow-auto">
-        {/* Weather full-width */}
-        <div className="border-b border-app-border">
-          <div className="p-2 border-b border-app-border">
-            <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Weather</h2>
-          </div>
-          <WeatherWidget f1={f1} />
-        </div>
-        {/* Damage | DRS+ERS stacked */}
+        {/* Weather | Damage side-by-side */}
         <div className="border-b border-app-border grid grid-cols-2">
           <div className="border-r border-app-border">
-            <CarDamageSection f1={f1} />
+            <div className="p-2 border-b border-app-border">
+              <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Weather</h2>
+            </div>
+            <WeatherWidget f1={f1} />
           </div>
           <div>
-            <DrsSection f1={f1} />
-            <ErsSection f1={f1} />
+            <CarDamageSection f1={f1} />
           </div>
         </div>
+        {/* ERS | Tyres */}
         <div className="border-b border-app-border grid grid-cols-2">
           <div className="border-r border-app-border">
+            <ErsSection f1={f1} />
+          </div>
+          <div>
             <TireGrid
               fl={{ tempC: Math.round(fToC(rawPacket!.TireTempFL)), wear: rawPacket!.TireWearFL, brakeTemp: rawPacket!.f1?.brakeTempFL ?? 0, pressure: rawPacket!.f1?.tyrePressureFL ?? 0 }}
               fr={{ tempC: Math.round(fToC(rawPacket!.TireTempFR)), wear: rawPacket!.TireWearFR, brakeTemp: rawPacket!.f1?.brakeTempFR ?? 0, pressure: rawPacket!.f1?.tyrePressureFR ?? 0 }}
@@ -102,13 +101,14 @@ export function F1LiveDashboard() {
               compoundStyle={COMPOUND_COLORS[rawPacket!.f1?.tyreCompound ?? "unknown"] ?? COMPOUND_COLORS.unknown}
             />
           </div>
-          <div>
-            <div className="p-2 border-b border-app-border">
-              <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Pit Window</h2>
-            </div>
-            <div className="p-3">
-              <PitEstimate packet={rawPacket!} />
-            </div>
+        </div>
+        {/* Pit Window */}
+        <div className="border-b border-app-border">
+          <div className="p-2 border-b border-app-border">
+            <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Pit Window</h2>
+          </div>
+          <div className="p-3">
+            <PitEstimate packet={rawPacket!} />
           </div>
         </div>
         <GridSection f1={f1} playerPosition={rawPacket!.RacePosition} />
@@ -126,31 +126,26 @@ export function F1LiveDashboard() {
   );
 }
 
-// ── DRS Section ──────────────────────────────────────────────────────────────
+// ── DRS Indicator ────────────────────────────────────────────────────────────
 
-function DrsSection({ f1 }: { f1: F1ExtendedData }) {
-  let bgColor = "";
-  let textColor = "text-app-text-dim";
+function DrsIndicator({ f1 }: { f1: F1ExtendedData }) {
+  let bg = "bg-zinc-700";
+  let text = "text-app-text-muted";
   let label = "DRS";
 
   if (f1.drsActivated) {
-    bgColor = "bg-green-600";
-    textColor = "text-white";
+    bg = "bg-green-600";
+    text = "text-white";
     label = "DRS OPEN";
   } else if (f1.drsAllowed) {
-    bgColor = "bg-green-900";
-    textColor = "text-green-300";
+    bg = "bg-green-900";
+    text = "text-green-300";
     label = "DRS READY";
   }
 
   return (
-    <div>
-      <div className="p-2 border-b border-app-border/50">
-        <h2 className="text-[10px] font-semibold text-app-text-muted uppercase tracking-wider">DRS</h2>
-      </div>
-      <div className="p-3 flex items-center justify-center">
-        <span className={`text-xs font-bold px-3 py-1 rounded ${bgColor} ${textColor}`}>{label}</span>
-      </div>
+    <div className="flex justify-center">
+      <span className={`text-sm font-bold px-3 py-1 rounded ${bg} ${text}`}>{label}</span>
     </div>
   );
 }
@@ -241,11 +236,12 @@ function ErsSection({ f1 }: { f1: F1ExtendedData }) {
   return (
     <div>
       <div className="p-2 border-b border-app-border/50 flex items-center justify-between">
-        <h2 className="text-[10px] font-semibold text-app-text-muted uppercase tracking-wider">ERS</h2>
-        <span className={`text-[10px] font-bold ${mode.color}`}>{mode.label}</span>
+        <h2 className="text-[10px] font-semibold text-app-text-muted uppercase tracking-wider">Electronics</h2>
+        {mode.label !== "NONE" && <span className={`text-[10px] font-bold ${mode.color}`}>{mode.label}</span>}
       </div>
       <div className="p-3">
-        <div className="h-3 rounded-full overflow-hidden mb-2">
+        <DrsIndicator f1={f1} />
+        <div className="h-3 rounded-full overflow-hidden mt-2 mb-1">
           <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${pct}%` }} />
         </div>
         <div className="flex justify-between text-xs text-app-text-muted font-mono tabular-nums">
