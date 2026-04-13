@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "assets/screenshots/**"
+  workflow_dispatch:
 
 jobs:
   update-readme:
