@@ -58,7 +58,7 @@ export function RecordedLaps({ trackOrdinal, showSessionType = false, maxLaps = 
     <div className="border-b border-app-border">
       <div className="p-2 border-b border-app-border flex items-center justify-between">
         <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Recorded Laps</h2>
-        {showSessionType && rawPacket?.f1?.sessionType && (
+        {showSessionType && rawPacket?.f1?.sessionType && rawPacket.f1.sessionType !== "unknown" && (
           <span className="text-xs font-bold text-app-accent uppercase">{rawPacket.f1.sessionType.replace(/-/g, " ")}</span>
         )}
       </div>
