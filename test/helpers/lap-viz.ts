@@ -25,7 +25,7 @@ export function generateRecordingVisualizations(
   laps: VisualizableLap[],
   rawPackets: TelemetryPacket[]
 ): void {
-  const outputDir = join(OUTPUT_DIR, recordingFile.replace(/\.bin$/, ""));
+  const outputDir = join(OUTPUT_DIR, recordingFile.replace(/\.bin(\.gz)?$/, ""));
   mkdirSync(outputDir, { recursive: true });
 
   generateRawSvg(rawPackets, outputDir);
