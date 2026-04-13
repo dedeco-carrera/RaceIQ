@@ -4,11 +4,11 @@ import type { F1ExtendedData } from "@shared/types";
 import { tryGetGame } from "@shared/games/registry";
 import { TireGrid } from "../telemetry/TireGrid";
 import { LapTimeChart } from "../LapTimeChart";
-import { SectorTimes } from "../SectorTimes";
-import { LapTimes } from "../telemetry/LapTimes";
 import { PitEstimate } from "../telemetry/PitEstimate";
 import { RecordedLaps } from "../RecordedLaps";
 import { NoDataView } from "../NoDataView";
+import { RaceInfo } from "../RaceInfo";
+import { useTrackName, useCarName } from "../../hooks/queries";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,9 +54,11 @@ function formatGap(gap: number): string {
 
 export function F1LiveDashboard() {
   const rawPacket = useTelemetryStore((s) => s.rawPacket);
-  const sectors = useTelemetryStore((s) => s.sectors);
+  const packet = useTelemetryStore((s) => s.packet);
   const hasF1Data = rawPacket?.gameId === "f1-2025" && rawPacket.f1;
   const f1 = hasF1Data ? rawPacket.f1! : null;
+  const { data: trackName } = useTrackName(rawPacket?.TrackOrdinal);
+  const { data: carName } = useCarName(rawPacket?.CarOrdinal);
 
   if (!f1) {
     return (
@@ -70,38 +72,12 @@ export function F1LiveDashboard() {
     <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 h-full">
       {/* Left column: Core telemetry + pit info */}
       <div className="border-r border-app-border overflow-auto">
-        {/* Race + Weather side by side */}
-        <div className="border-b border-app-border grid grid-cols-2">
-          <div className="border-r border-app-border">
-            <div className="p-2 border-b border-app-border">
-              <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Race</h2>
-            </div>
-            <div className="p-2">
-              <div className="flex gap-4 mb-2">
-                <div className="w-fit">
-                  <div className="text-[10px] text-app-text-muted uppercase tracking-wider">Position</div>
-                  <div className="text-3xl font-mono font-bold text-app-text tabular-nums leading-none">
-                    P{rawPacket!.RacePosition}
-                  </div>
-                </div>
-                <div className="w-fit">
-                  <div className="text-[10px] text-app-text-muted uppercase tracking-wider">Lap</div>
-                  <div className="text-3xl font-mono font-bold text-app-text tabular-nums leading-none">
-                    {rawPacket!.LapNumber}{f1.totalLaps > 0 ? `/${f1.totalLaps}` : ""}
-                  </div>
-                </div>
-              </div>
-              <LapTimes packet={rawPacket!} sectors={sectors} />
-              <div className="mt-3" />
-              <SectorTimes />
-            </div>
+        {/* Weather full-width */}
+        <div className="border-b border-app-border">
+          <div className="p-2 border-b border-app-border">
+            <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Weather</h2>
           </div>
-          <div>
-            <div className="p-2 border-b border-app-border">
-              <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Weather</h2>
-            </div>
-            <WeatherWidget f1={f1} />
-          </div>
+          <WeatherWidget f1={f1} />
         </div>
         {/* Damage | DRS+ERS stacked */}
         <div className="border-b border-app-border grid grid-cols-2">
@@ -138,8 +114,9 @@ export function F1LiveDashboard() {
         <GridSection f1={f1} playerPosition={rawPacket!.RacePosition} />
       </div>
 
-      {/* Right column: Charts + Recorded Laps */}
+      {/* Right column: Race info + Charts + Recorded Laps */}
       <div className="overflow-auto flex flex-col">
+        <RaceInfo packet={packet!} trackName={trackName} carName={carName} totalLaps={f1.totalLaps} showTrackMap={false} showSectors={true} />
         <LapTimeChart packet={rawPacket!} />
         <div className="flex-1">
           <RecordedLaps showSessionType />

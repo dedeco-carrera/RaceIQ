@@ -3,10 +3,11 @@ import { LiveTrackMap } from "./LiveTrackMap";
 import { LapTimes } from "./telemetry/LapTimes";
 import { SectorTimes } from "./SectorTimes";
 
-export function RaceInfo({ packet, trackName, carName, showTrackMap = true, showSectors = true }: {
+export function RaceInfo({ packet, trackName, carName, totalLaps, showTrackMap = true, showSectors = true }: {
   packet: NonNullable<ReturnType<typeof useTelemetryStore.getState>["packet"]>;
   trackName: string | undefined;
   carName: string | undefined;
+  totalLaps?: number;
   showTrackMap?: boolean;
   showSectors?: boolean;
 }) {
@@ -35,7 +36,7 @@ export function RaceInfo({ packet, trackName, carName, showTrackMap = true, show
               <div>
                 <div className="text-[10px] text-app-text-muted uppercase tracking-wider">Lap</div>
                 <div className="text-3xl font-mono font-bold text-app-text tabular-nums leading-none">
-                  {packet.LapNumber}
+                  {packet.LapNumber}{totalLaps && totalLaps > 0 ? `/${totalLaps}` : ""}
                 </div>
               </div>
             </div>
