@@ -75,7 +75,7 @@ export function F1LiveDashboard() {
         {/* Weather | Electronics side-by-side */}
         <div className="border-b border-app-border grid grid-cols-2">
           <div className="border-r border-app-border">
-            <div className="p-2 border-b border-app-border">
+            <div className="h-8 px-2 border-b border-app-border flex items-center">
               <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Weather</h2>
             </div>
             <WeatherWidget f1={f1} />
@@ -104,7 +104,7 @@ export function F1LiveDashboard() {
         </div>
         {/* Pit Window */}
         <div className="border-b border-app-border">
-          <div className="p-2 border-b border-app-border">
+          <div className="h-8 px-2 border-b border-app-border flex items-center">
             <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Pit Window</h2>
           </div>
           <div className="p-3">
@@ -169,7 +169,7 @@ function CarDamageSection({ f1 }: { f1: F1ExtendedData }) {
 
   return (
     <div className="border-b border-app-border">
-      <div className="p-2 border-b border-app-border flex items-center justify-between">
+      <div className="h-8 px-2 border-b border-app-border flex items-center justify-between">
         <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Damage</h2>
         {!hasDamage && <span className="text-xs text-emerald-400">All Clear</span>}
       </div>
@@ -235,7 +235,7 @@ function ErsSection({ f1 }: { f1: F1ExtendedData }) {
 
   return (
     <div>
-      <div className="p-2 border-b border-app-border/50">
+      <div className="h-8 px-2 border-b border-app-border flex items-center justify-between">
         <h2 className="text-[10px] font-semibold text-app-text-muted uppercase tracking-wider">Electronics</h2>
       </div>
       <div className="p-3 space-y-2">
@@ -341,7 +341,7 @@ function GridSection({ f1, playerPosition }: { f1: F1ExtendedData; playerPositio
 
   return (
     <div className="flex flex-col flex-1">
-      <div className="p-2 border-b border-app-border flex items-center justify-between">
+      <div className="h-8 px-2 border-b border-app-border flex items-center justify-between">
         <h2 className="text-xs font-semibold text-app-text-muted uppercase tracking-wider">Live Standings</h2>
         <button
           onClick={() => setExpanded(!expanded)}
