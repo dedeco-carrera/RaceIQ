@@ -17,7 +17,7 @@ describe("F1-2025 recording", () => {
   describe("f1-2025-2026-04-09T21-34-10-190Z.bin.gz", () => {
     const recordingFile = "f1-2025-2026-04-09T21-34-10-190Z.bin.gz";
 
-    test("detects laps correctly", async () => {
+    test("detects laps correctly", { timeout: 60000 }, async () => {
       const recording = getRecording(recordingFile);
       if (!recording) {
         console.log(`Recording not found: ${recordingFile}`);

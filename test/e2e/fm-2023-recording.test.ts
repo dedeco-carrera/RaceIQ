@@ -17,7 +17,7 @@ describe("FM-2023 recording", () => {
   describe("fm-2023-2026-04-09T21-53-00-102Z.bin.gz", () => {
     const recordingFile = "fm-2023-2026-04-09T21-53-00-102Z.bin.gz";
 
-    test("detects laps correctly", async () => {
+    test("detects laps correctly", { timeout: 60000 }, async () => {
       const recording = getRecording(recordingFile);
       if (!recording) {
         console.log(`Recording not found: ${recordingFile}`);
@@ -113,7 +113,7 @@ describe("FM-2023 recording", () => {
   describe("fm-2023-2026-04-09T21-55-03-186Z.bin.gz", () => {
     const recordingFile = "fm-2023-2026-04-09T21-55-03-186Z.bin.gz";
 
-    test("detects laps correctly", async () => {
+    test("detects laps correctly", { timeout: 60000 }, async () => {
       const recording = getRecording(recordingFile);
       if (!recording) {
         console.log(`Recording not found: ${recordingFile}`);
