@@ -235,19 +235,23 @@ function ErsSection({ f1 }: { f1: F1ExtendedData }) {
 
   return (
     <div>
-      <div className="p-2 border-b border-app-border/50 flex items-center justify-between">
+      <div className="p-2 border-b border-app-border/50">
         <h2 className="text-[10px] font-semibold text-app-text-muted uppercase tracking-wider">Electronics</h2>
-        {mode.label !== "NONE" && <span className={`text-[10px] font-bold ${mode.color}`}>{mode.label}</span>}
       </div>
-      <div className="p-3">
-        <DrsIndicator f1={f1} />
-        <div className="h-3 rounded-full overflow-hidden mt-2 mb-1">
+      <div className="p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <DrsIndicator f1={f1} />
+          <div className="flex items-center gap-1.5">
+            <span className={`text-sm font-bold px-2 py-0.5 rounded bg-zinc-700 tabular-nums ${barColor.replace("bg-", "text-")}`}>{pct.toFixed(0)}%</span>
+            {mode.label !== "NONE" && <span className={`text-sm font-bold px-2 py-0.5 rounded bg-zinc-700 ${mode.color}`}>{mode.label}</span>}
+          </div>
+        </div>
+        <div className="h-2 rounded-full overflow-hidden">
           <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${pct}%` }} />
         </div>
-        <div className="flex justify-between text-xs text-app-text-muted font-mono tabular-nums">
-          <span>Deploy: {deployedPct.toFixed(0)}%</span>
-          <span className="text-app-text-secondary font-bold">{pct.toFixed(0)}%</span>
-          <span>Harvest: {harvestedPct.toFixed(0)}%</span>
+        <div className="flex justify-between text-[10px] text-app-text-muted font-mono tabular-nums">
+          <span>↓ {deployedPct.toFixed(0)}%</span>
+          <span>↑ {harvestedPct.toFixed(0)}%</span>
         </div>
       </div>
     </div>
