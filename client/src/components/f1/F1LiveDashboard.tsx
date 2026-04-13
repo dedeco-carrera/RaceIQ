@@ -116,10 +116,10 @@ export function F1LiveDashboard() {
 
       {/* Right column: Race info + Charts + Recorded Laps */}
       <div className="overflow-y-auto overflow-x-hidden flex flex-col">
-        <RaceInfo packet={packet!} trackName={trackName} carName={carName} totalLaps={f1.totalLaps} showTrackMap={false} showSectors={true} />
+        <RaceInfo packet={packet!} trackName={trackName} carName={carName} totalLaps={f1.totalLaps} sessionType={f1.sessionType} showTrackMap={false} showSectors={true} />
         <LapTimeChart packet={rawPacket!} />
         <div className="flex-1">
-          <RecordedLaps showSessionType />
+          <RecordedLaps />
         </div>
       </div>
     </div>
