@@ -6,7 +6,7 @@ import { parseDump } from "../../helpers/parse-dump";
 import { TestLogger } from "../../helpers/test-logger";
 import { assertBrandHatchSectorBounds, lapSummary, RECORDINGS_DIR } from "./shared";
 
-const recordingFile = "acc-2026-04-12T21-44-38-899Z.bin";
+const recordingFile = "acc-2026-04-12T21-44-38-899Z.bin.gz";
 const recording = join(RECORDINGS_DIR, recordingFile);
 
 describe(recordingFile, () => {

@@ -9,7 +9,7 @@ import { assertSectorTimesMatchLapTime, assertLapTimesProper } from "../../helpe
 import type { LapSavedNotification } from "../../../server/lap-detector";
 import { assertBrandHatchSectorBounds, lapSummary, RECORDINGS_DIR } from "./shared";
 
-const recordingFile = "acc-2026-04-10T02-59-28-972Z.bin";
+const recordingFile = "acc-2026-04-10T02-59-28-972Z.bin.gz";
 const recording = join(RECORDINGS_DIR, recordingFile);
 
 describe(recordingFile, () => {

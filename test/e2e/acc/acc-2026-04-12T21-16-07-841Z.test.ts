@@ -6,7 +6,7 @@ import { parseDump } from "../../helpers/parse-dump";
 import { TestLogger } from "../../helpers/test-logger";
 import { lapSummary, RECORDINGS_DIR } from "./shared";
 
-const recordingFile = "acc-2026-04-12T21-16-07-841Z.bin";
+const recordingFile = "acc-2026-04-12T21-16-07-841Z.bin.gz";
 const recording = join(RECORDINGS_DIR, recordingFile);
 
 describe(recordingFile, () => {

@@ -7,7 +7,7 @@ import { generateRecordingVisualizations } from "../../helpers/lap-viz";
 import { TestLogger } from "../../helpers/test-logger";
 import { assertBrandHatchSectorBounds, lapSummary, RECORDINGS_DIR } from "./shared";
 
-const recordingFile = "acc-2026-04-09T18-56-49-633Z.bin";
+const recordingFile = "acc-2026-04-09T18-56-49-633Z.bin.gz";
 const recording = join(RECORDINGS_DIR, recordingFile);
 
 describe(recordingFile, () => {
