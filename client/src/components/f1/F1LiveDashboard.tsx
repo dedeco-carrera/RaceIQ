@@ -72,7 +72,7 @@ export function F1LiveDashboard() {
     <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 h-full">
       {/* Left column: Core telemetry + pit info */}
       <div className="border-r border-app-border overflow-auto">
-        {/* Weather | Damage side-by-side */}
+        {/* Weather | Electronics side-by-side */}
         <div className="border-b border-app-border grid grid-cols-2">
           <div className="border-r border-app-border">
             <div className="p-2 border-b border-app-border">
@@ -81,13 +81,13 @@ export function F1LiveDashboard() {
             <WeatherWidget f1={f1} />
           </div>
           <div>
-            <CarDamageSection f1={f1} />
+            <ErsSection f1={f1} />
           </div>
         </div>
-        {/* ERS | Tyres */}
+        {/* Damage | Tyres */}
         <div className="border-b border-app-border grid grid-cols-2">
           <div className="border-r border-app-border">
-            <ErsSection f1={f1} />
+            <CarDamageSection f1={f1} />
           </div>
           <div>
             <TireGrid
