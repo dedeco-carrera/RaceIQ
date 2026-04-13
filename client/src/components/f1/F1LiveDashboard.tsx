@@ -271,27 +271,27 @@ function WeatherWidget({ f1 }: { f1: F1ExtendedData }) {
   const hasRain = f1.rainPercentage > 0;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2">
-      <div className="text-2xl leading-none">{icon}</div>
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-bold text-app-text">{label}</div>
-        {hasRain && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <div className="h-1 flex-1 rounded-full overflow-hidden">
-              <div className="h-full rounded-full bg-blue-400" style={{ width: `${f1.rainPercentage}%` }} />
-            </div>
-            <span className="text-xs font-mono font-bold text-blue-400 tabular-nums leading-none">{f1.rainPercentage}%</span>
-          </div>
-        )}
+    <div className="h-full flex flex-col justify-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <div className="text-3xl leading-none">{icon}</div>
+        <div className="text-sm font-bold text-app-text">{label}</div>
       </div>
-      <div className="flex gap-2">
-        <div className="text-center">
-          <div className="text-[9px] text-app-text-muted uppercase">Track</div>
-          <div className="text-sm font-mono font-bold text-orange-400 tabular-nums leading-none">{f1.trackTemperature}&deg;</div>
+      {hasRain && (
+        <div className="flex items-center gap-1">
+          <div className="h-1.5 flex-1 rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-blue-400" style={{ width: `${f1.rainPercentage}%` }} />
+          </div>
+          <span className="text-xs font-mono font-bold text-blue-400 tabular-nums leading-none">{f1.rainPercentage}%</span>
         </div>
-        <div className="text-center">
+      )}
+      <div className="flex gap-3">
+        <div>
+          <div className="text-[9px] text-app-text-muted uppercase">Track</div>
+          <div className="text-base font-mono font-bold text-orange-400 tabular-nums leading-none">{f1.trackTemperature}&deg;</div>
+        </div>
+        <div>
           <div className="text-[9px] text-app-text-muted uppercase">Air</div>
-          <div className="text-sm font-mono font-bold text-cyan-400 tabular-nums leading-none">{f1.airTemperature}&deg;</div>
+          <div className="text-base font-mono font-bold text-cyan-400 tabular-nums leading-none">{f1.airTemperature}&deg;</div>
         </div>
       </div>
     </div>
