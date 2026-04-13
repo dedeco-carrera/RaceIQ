@@ -36,5 +36,5 @@ describe(recordingFile, () => {
     expect(laps[3].isValid).toBe(true);
     assertBrandHatchSectorBounds(laps[3]);
     log.flush();
-  }, { timeout: 30000 });
+  });
 });

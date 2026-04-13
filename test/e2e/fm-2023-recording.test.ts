@@ -107,7 +107,7 @@ describe("FM-2023 recording", () => {
         generateRecordingVisualizations(recordingFile, laps, rawPackets);
         console.log(`[Visualizations] Generated for ${laps.length} laps`);
       }
-    }, { timeout: 30000 });
+    });
   });
 
   describe("fm-2023-2026-04-09T21-55-03-186Z.bin.gz", () => {
@@ -203,6 +203,6 @@ describe("FM-2023 recording", () => {
         generateRecordingVisualizations(recordingFile, laps, rawPackets);
         console.log(`[Visualizations] Generated for ${laps.length} laps`);
       }
-    }, { timeout: 30000 });
+    });
   });
 });

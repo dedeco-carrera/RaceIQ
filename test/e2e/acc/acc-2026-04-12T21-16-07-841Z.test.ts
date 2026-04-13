@@ -20,5 +20,5 @@ describe(recordingFile, () => {
     for (const l of laps) log.log(lapSummary(l));
     log.log(`lap-saved notifications: ${lapSaved.map((n: any) => `lap${n.lapNumber}`).join(", ")}`);
     log.flush();
-  }, { timeout: 30000 });
+  });
 });

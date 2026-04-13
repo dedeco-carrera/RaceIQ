@@ -51,5 +51,5 @@ describe(recordingFile, () => {
     expect(laps[3].isValid).toBe(false);
     expect(laps[3].invalidReason).toBe("incomplete");
     log.flush();
-  }, { timeout: 30000 });
+  });
 });

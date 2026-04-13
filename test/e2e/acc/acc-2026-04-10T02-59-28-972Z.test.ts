@@ -75,5 +75,5 @@ describe(recordingFile, () => {
     expect(lapSaved[3].isValid).toBe(true);
 
     log.flush();
-  }, { timeout: 30000 });
+  });
 });
