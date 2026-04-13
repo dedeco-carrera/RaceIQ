@@ -19,7 +19,7 @@ describe(recordingFile, () => {
 
     log.log(`v2 detected ${laps.length} lap(s)`);
     for (const l of laps) log.log(lapSummary(l));
-    await generateRecordingVisualizations(recordingFile, laps, rawPackets);
+    generateRecordingVisualizations(recordingFile, laps, rawPackets);
 
     expect(carModel).toBe("mclaren_720s_gt3_evo");
     expect(trackName).toBe("brands_hatch");

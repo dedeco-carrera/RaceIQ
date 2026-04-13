@@ -22,7 +22,7 @@ describe(recordingFile, () => {
 
     log.log(`v2 detected ${laps.length} lap(s)`);
     for (const l of laps) log.log(lapSummary(l));
-    await generateRecordingVisualizations(recordingFile, laps, rawPackets);
+    generateRecordingVisualizations(recordingFile, laps, rawPackets);
 
     expect(laps.length).toBe(5);
     expect(laps.filter((l) => l.isValid).length).toBe(3);

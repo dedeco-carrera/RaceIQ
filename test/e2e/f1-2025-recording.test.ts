@@ -104,7 +104,7 @@ describe("F1-2025 recording", () => {
       // Regenerate SVG + GIF visualizations for this recording
       if (wsNotifications.length > 0) {
         const { rawPackets } = await parseDump("f1-2025", recording);
-        await generateRecordingVisualizations(recordingFile, laps, rawPackets);
+        generateRecordingVisualizations(recordingFile, laps, rawPackets);
         console.log(`[Visualizations] Generated for ${laps.length} laps`);
       }
     });

@@ -104,7 +104,7 @@ describe("FM-2023 recording", () => {
       // Regenerate SVG + GIF visualizations for this recording
       if (wsNotifications.length > 0) {
         const { rawPackets } = await parseDump("fm-2023", recording);
-        await generateRecordingVisualizations(recordingFile, laps, rawPackets);
+        generateRecordingVisualizations(recordingFile, laps, rawPackets);
         console.log(`[Visualizations] Generated for ${laps.length} laps`);
       }
     }, { timeout: 30000 });
@@ -200,7 +200,7 @@ describe("FM-2023 recording", () => {
       // Regenerate SVG + GIF visualizations for this recording
       if (wsNotifications.length > 0) {
         const { rawPackets } = await parseDump("fm-2023", recording);
-        await generateRecordingVisualizations(recordingFile, laps, rawPackets);
+        generateRecordingVisualizations(recordingFile, laps, rawPackets);
         console.log(`[Visualizations] Generated for ${laps.length} laps`);
       }
     }, { timeout: 30000 });
