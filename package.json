@@ -3,7 +3,8 @@
   "version": "0.6.0",
   "type": "module",
   "workspaces": [
-    "client"
+    "client",
+    "playwright"
   ],
   "scripts": {
     "dev": "concurrently \"bun --watch run server/index.ts\" \"bun run dev:client\"",
@@ -60,5 +61,8 @@
     "lefthook": "^2.1.6",
     "lighthouse": "^13.1.0",
     "portless": "^0.10.3"
+  },
+  "optionalDependencies": {
+    "@libsql/darwin-arm64": "^0.5.29"
   }
 }
