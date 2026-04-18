@@ -40,12 +40,14 @@ Check out the [demo](https://www.youtube.com/watch?v=hWuIItofivA) and [screensho
 
 ## Supported Games
 
-| Game | Community Tunes | Community Guides | Tune Creator |
-|------|-----------------|-----------------|--------------|
-| Forza Motorsport 2023 | No | No | Yes |
-| F1 2025 | Yes | Yes | No |
-| Assetto Corsa Competizione | Yes | Yes | No |
-| Assetto Corsa Evo | No | No | No |
+| Game | Status | Community Tunes | Community Guides | Tune Creator |
+|------|--------|-----------------|------------------|--------------|
+| Forza Motorsport 2023 | Supported | No | No | Yes |
+| F1 2025 | Supported | Yes | Yes | No |
+| Assetto Corsa Competizione | Supported | Yes | Yes | No |
+| Assetto Corsa Evo | Supported | No | No | No |
+| Le Mans Ultimate | Blocked — awaiting game key / sponsorship | — | — | — |
+| iRacing | Blocked — awaiting game key / sponsorship | — | — | — |
 
 ## Getting Started
 
