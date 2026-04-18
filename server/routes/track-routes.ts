@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { IS_DEV } from "../env";
 import { OrdinalParamSchema, GameIdQuerySchema } from "../../shared/schemas";
+import { detectSegments } from "../track-segment-detect";
 import {
   getLaps,
   getLapSummariesByTrack,
@@ -48,6 +49,7 @@ import {
 } from "../track-calibration";
 import { getF1Tracks } from "../../shared/f1-track-data";
 import { getAccTracks } from "../../shared/acc-track-data";
+import { getAcEvoTracks } from "../../shared/ac-evo-track-data";
 import { tryGetServerGame } from "../games/registry";
 import { tryGetGame } from "../../shared/games/registry";
 import { GameIdSchema, type GameId } from "../../shared/types";
@@ -61,6 +63,19 @@ const TrackOrdinalParamSchema = z.object({
 });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Pull a per-game override (segments, sectors, …) from a shared track meta blob.
+ * AC Evo and ACC share the same Kunos track geometry, so any ACC override is
+ * reused for AC Evo when AC Evo doesn't have its own.
+ */
+function gameMetaOverride(sharedMeta: unknown, gameId: string | undefined, field: "sectors" | "segments"): any {
+  const games = (sharedMeta as { games?: Record<string, Record<string, unknown>> } | null)?.games;
+  if (!games) return null;
+  if (gameId && games[gameId]?.[field] != null) return games[gameId][field];
+  if (gameId === "ac-evo" && games.acc?.[field] != null) return games.acc[field];
+  return null;
+}
 
 /** Extract gameId, throwing if missing. Use for endpoints that require game context. */
 function requireGameId(c: { req: { query: (key: string) => string | undefined } }): GameId {
@@ -246,8 +261,7 @@ export const trackRoutes = new Hono()
 
       // Priority: game-specific meta -> shared meta -> bundled code
       const sharedMeta = sharedName ? loadSharedTrackMeta(sharedName) : null;
-      const gameSectors = gameId ? (sharedMeta as any)?.games?.[gameId]?.sectors : null;
-      const sectors = gameSectors ?? sharedMeta?.sectors ?? getTrackSectorsByOrdinal(ordinal);
+      const sectors = gameMetaOverride(sharedMeta, gameId, "sectors") ?? sharedMeta?.sectors ?? getTrackSectorsByOrdinal(ordinal);
 
       // Compute track length from outline
       let trackLength = 0;
@@ -354,11 +368,35 @@ export const trackRoutes = new Hono()
         return c.json(tracks);
       }
 
-      // Default: Forza tracks
-      const forzaGameId = gameId ?? "fm-2023";
-      const lapCounts = await getLapCountsByTrack(forzaGameId as any);
+      if (gameId === "ac-evo") {
+        const acEvoTracks = getAcEvoTracks();
+        const lapCounts = await getLapCountsByTrack("ac-evo");
+        const tracks = Array.from(acEvoTracks.entries()).map(([id, info]) => {
+          const hasBundled = !!getTrackOutlineByOrdinal(id, "ac-evo", info.commonTrackName ?? undefined);
+          return {
+            ordinal: id,
+            name: info.name,
+            location: "",
+            country: "",
+            variant: info.variant,
+            lengthKm: 0,
+            hasOutline: hasBundled,
+            outlineSource: hasBundled ? "bundled" : null,
+            createdAt: null,
+            lapCount: lapCounts.get(id) ?? 0,
+          };
+        });
+        tracks.sort((a, b) => a.name.localeCompare(b.name));
+        return c.json(tracks);
+      }
+
+      if (gameId !== "fm-2023") {
+        return c.json({ error: `unknown or missing gameId: ${gameId ?? "(none)"}` }, 400);
+      }
+
+      const lapCounts = await getLapCountsByTrack("fm-2023");
       const tracks = Array.from(trackMap.entries()).map(([ordinal, info]) => {
-        const hasBundled = !!getTrackOutlineByOrdinal(ordinal, forzaGameId);
+        const hasBundled = !!getTrackOutlineByOrdinal(ordinal, "fm-2023");
         return {
           ordinal,
           name: info.name,
@@ -420,7 +458,6 @@ export const trackRoutes = new Hono()
   )
 
   // GET /api/track-sectors/:ordinal — returns user-edited, named, or auto-detected segments.
-  // Optional ?source=extracted to force returning only extracted game segments.
   .get("/api/track-sectors/:ordinal",
     zValidator("param", OrdinalParamSchema),
     zValidator("query", GameIdQuerySchema),
@@ -429,11 +466,10 @@ export const trackRoutes = new Hono()
       const gameId = c.req.query("gameId");
       const sharedName = getSharedTrackName(ordinal, gameId);
 
-      // 1. Shared track meta segments — game-specific only (no cross-game fallback)
       const sharedMeta = sharedName ? loadSharedTrackMeta(sharedName) : null;
-      const metaSegments = gameId
-        ? (sharedMeta as any)?.games?.[gameId]?.segments ?? null
-        : sharedMeta?.segments ?? null;
+      const metaSegments = (gameId
+        ? gameMetaOverride(sharedMeta, gameId, "segments")
+        : (sharedMeta?.segments as unknown)) ?? null;
       if (metaSegments && metaSegments.length > 0) {
         return c.json({
           segments: metaSegments.map((s: any) => ({
@@ -448,7 +484,6 @@ export const trackRoutes = new Hono()
         });
       }
 
-      // Fall back to auto-detection from outline curvature
       let outline = gameId ? getTrackOutlineByOrdinal(ordinal, gameId, sharedName) : null;
       if (!outline) {
         const recorded = gameId ? await getDbTrackOutline(ordinal, gameId as GameId) : null;
@@ -458,119 +493,8 @@ export const trackRoutes = new Hono()
       }
       if (!outline || outline.length < 20) return c.json({ segments: [] });
 
-      const n = outline.length;
-
-      // Compute cumulative distance
-      const dists = [0];
-      for (let i = 1; i < n; i++) {
-        const dx = outline[i].x - outline[i - 1].x;
-        const dz = outline[i].z - outline[i - 1].z;
-        dists.push(dists[i - 1] + Math.sqrt(dx * dx + dz * dz));
-      }
-      const totalDist = dists[n - 1];
-
-      // Compute curvature at each point using angle change over a window
-      const window = Math.max(3, Math.floor(n / 80));
-      const signedCurvature: number[] = [];
-      const curvature: number[] = [];
-      for (let i = 0; i < n; i++) {
-        const prev = (i - window + n) % n;
-        const next = (i + window) % n;
-        const dx1 = outline[i].x - outline[prev].x;
-        const dz1 = outline[i].z - outline[prev].z;
-        const dx2 = outline[next].x - outline[i].x;
-        const dz2 = outline[next].z - outline[i].z;
-        const angle1 = Math.atan2(dz1, dx1);
-        const angle2 = Math.atan2(dz2, dx2);
-        let diff = angle2 - angle1;
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
-        signedCurvature.push(diff);
-        curvature.push(Math.abs(diff));
-      }
-
-      // Smooth curvature
-      const smoothWindow = Math.max(2, Math.floor(n / 60));
-      const smoothed: number[] = [];
-      for (let i = 0; i < n; i++) {
-        let sum = 0;
-        for (let j = -smoothWindow; j <= smoothWindow; j++) {
-          sum += curvature[(i + j + n) % n];
-        }
-        smoothed.push(sum / (smoothWindow * 2 + 1));
-      }
-
-      // Threshold: 54th percentile
-      const sorted = [...smoothed].sort((a, b) => a - b);
-      const threshold = sorted[Math.floor(n * 0.54)];
-
-      // Build segments by classifying each point
-      type Seg = { type: "corner" | "straight"; startIdx: number; endIdx: number; startFrac: number; endFrac: number };
-      const segments: Seg[] = [];
-      let currentType: "corner" | "straight" = smoothed[0] > threshold ? "corner" : "straight";
-      let segStart = 0;
-
-      for (let i = 1; i < n; i++) {
-        const type = smoothed[i] > threshold ? "corner" : "straight";
-        if (type !== currentType) {
-          segments.push({ type: currentType, startFrac: segStart / n, endFrac: i / n, startIdx: segStart, endIdx: i });
-          currentType = type;
-          segStart = i;
-        }
-      }
-      segments.push({ type: currentType, startFrac: segStart / n, endFrac: 1, startIdx: segStart, endIdx: n - 1 });
-
-      // Merge tiny segments (< 1.5% of track) into neighbor
-      const pass1: Seg[] = [];
-      for (const seg of segments) {
-        if ((seg.endFrac - seg.startFrac) < 0.015 && pass1.length > 0) {
-          pass1[pass1.length - 1].endFrac = seg.endFrac;
-          pass1[pass1.length - 1].endIdx = seg.endIdx;
-        } else {
-          pass1.push({ ...seg });
-        }
-      }
-
-      // Consolidate adjacent same-type segments
-      const merged: Seg[] = [];
-      for (const seg of pass1) {
-        if (merged.length > 0 && merged[merged.length - 1].type === seg.type) {
-          merged[merged.length - 1].endFrac = seg.endFrac;
-          merged[merged.length - 1].endIdx = seg.endIdx;
-        } else {
-          merged.push({ ...seg });
-        }
-      }
-
-      // Name segments with direction for corners
-      let cornerNum = 1;
-      let straightNum = 1;
-      const namedSegs = merged.map((seg) => {
-        let name: string;
-        let direction: "left" | "right" | null = null;
-
-        if (seg.type === "corner") {
-          // Sum signed curvature over the segment to determine direction
-          let sumCurv = 0;
-          for (let i = seg.startIdx; i <= Math.min(seg.endIdx, n - 1); i++) {
-            sumCurv += signedCurvature[i];
-          }
-          direction = sumCurv > 0 ? "right" : "left";
-          name = `T${cornerNum++} ${direction === "left" ? "L" : "R"}`;
-        } else {
-          name = `S${straightNum++}`;
-        }
-
-        return {
-          ...seg,
-          name,
-          direction,
-          distStart: dists[seg.startIdx],
-          distEnd: seg.endIdx < n ? dists[seg.endIdx] : totalDist,
-        };
-      });
-
-      return c.json({ segments: namedSegs, totalDist });
+      const result = detectSegments(outline);
+      return c.json({ segments: result.segments, totalDist: result.totalDist, source: "auto" });
     }
   )
 
@@ -694,8 +618,14 @@ export const trackRoutes = new Hono()
       const { trackOrdinal } = c.req.valid("param");
 
       const gameId = c.req.query("gameId") as GameId | undefined;
+      if (!gameId) {
+        return c.json({ error: "gameId query parameter is required" }, 400);
+      }
+      // Hard-filter by gameId even though getLaps() already scopes its query:
+      // belt-and-braces so cross-game ordinal collisions (Forza track 2 ≠ AC
+      // Evo track 2) can never leak into the wrong tracks page.
       const trackLaps = (await getLaps(gameId)).filter(
-        (l) => l.trackOrdinal === trackOrdinal && l.lapTime > 0
+        (l) => l.trackOrdinal === trackOrdinal && l.lapTime > 0 && l.gameId === gameId
       );
 
       // Derive class letter from PI value
@@ -844,8 +774,7 @@ export const trackRoutes = new Hono()
       // Get sector boundaries (same priority as /api/track-sector-boundaries)
       const sharedName = getSharedTrackName(ordinal, gameId);
       const sharedMeta = sharedName ? loadSharedTrackMeta(sharedName) : null;
-      const gameSectors = gameId ? (sharedMeta as any)?.games?.[gameId]?.sectors : null;
-      const rawSectors = gameSectors ?? sharedMeta?.sectors ?? getTrackSectorsByOrdinal(ordinal);
+      const rawSectors = gameMetaOverride(sharedMeta, gameId, "sectors") ?? sharedMeta?.sectors ?? getTrackSectorsByOrdinal(ordinal);
       const sectors = { s1End: rawSectors?.s1End ?? 1 / 3, s2End: rawSectors?.s2End ?? 2 / 3 };
 
       const result: Record<number, { s1: number; s2: number; s3: number }> = {};
@@ -910,7 +839,7 @@ export const trackRoutes = new Hono()
       const startYaw = gameId ? getStartYaw(ordinal, gameId) : null;
       const altitude = getTrackAltitudeByOrdinal(ordinal);
 
-      const flipX = gameId === "acc";
+      const flipX = gameId === "acc" || gameId === "ac-evo";
 
       // Try all sources: bundled game data → computed average → DB → TUMFTM
       if (gameId) {
@@ -974,7 +903,7 @@ export const trackRoutes = new Hono()
           rightEdge: extractedBoundaries.rightEdge,
           centerLine,
           pitLane: extractedBoundaries.pitLane,
-          coordSystem: validGameId === "f1-2025" ? "f1-2025" : validGameId === "acc" ? "acc" : "forza",
+          coordSystem: validGameId === "f1-2025" ? "f1-2025" : (validGameId === "acc" || validGameId === "ac-evo") ? "acc" : "forza",
         });
       }
 

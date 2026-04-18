@@ -18,8 +18,8 @@ interface PitEstimateProps {
 export function PitEstimate({ packet, pit, gameId, healthThresholds }: PitEstimateProps) {
   const healthThresh = healthThresholds;
 
-  // Forza: Fuel is 0..1 fraction → percentage. ACC/F1: Fuel is in litres/kg.
-  const fuelIsLitres = gameId === "acc" || gameId === "f1-2025";
+  // Forza: Fuel is 0..1 fraction → percentage. ACC/AC Evo/F1: Fuel is in litres/kg.
+  const fuelIsLitres = gameId === "acc" || gameId === "ac-evo" || gameId === "f1-2025";
   const fuelPct = fuelIsLitres ? Math.min(100, packet.Fuel) : (packet.Fuel * 100);
   const fuelDisplay = fuelIsLitres ? `${packet.Fuel.toFixed(1)}L` : `${fuelPct.toFixed(0)}%`;
   const fuelColor = fuelIsLitres
@@ -45,9 +45,20 @@ export function PitEstimate({ packet, pit, gameId, healthThresholds }: PitEstima
     };
   });
 
+  const pitStatus = packet.acc?.pitStatus;
+  const pitBadge =
+    pitStatus === "in_pit"   ? { label: "IN PIT",   cls: "bg-sky-500/20 text-sky-300 border-sky-500/30" } :
+    pitStatus === "pit_lane" ? { label: "PIT LANE", cls: "bg-amber-500/20 text-amber-300 border-amber-500/30" } :
+    null;
+
   return (
     <div>
-      <div className="flex justify-end mb-3">
+      <div className="flex items-center justify-between mb-3">
+        {pitBadge ? (
+          <span className={`text-xs font-bold px-2 py-0.5 rounded border tracking-widest uppercase ${pitBadge.cls}`}>
+            {pitBadge.label}
+          </span>
+        ) : <span />}
         <PitWindow pit={pit} gameId={gameId} />
       </div>
       <div className="space-y-3">

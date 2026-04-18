@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect, useLayoutEffect, useImperativeHandle, forwardRef } from "react";
 import type { TelemetryPacket } from "@shared/types";
 import { tryGetGame } from "@shared/games/registry";
+import { needsTrackFlip, flipPoints } from "../../lib/track-coords";
 
 export interface Point {
   x: number;
@@ -87,10 +88,13 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
       return;
     }
 
-    const hasBounds = (boundaries?.coordSystem === "forza" || boundaries?.coordSystem === "f1-2025") && boundaries.leftEdge?.length > 2;
+    const flip = needsTrackFlip(telemetry[0]?.gameId);
+    const flippedLeft = flip && boundaries?.leftEdge ? flipPoints(boundaries.leftEdge) : boundaries?.leftEdge;
+    const flippedRight = flip && boundaries?.rightEdge ? flipPoints(boundaries.rightEdge) : boundaries?.rightEdge;
+    const hasBounds = boundaries?.coordSystem && flippedLeft && flippedLeft.length > 2;
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     const allBoundsPts: Point[][] = [displayOutline];
-    if (hasBounds) allBoundsPts.push(boundaries!.leftEdge, boundaries!.rightEdge);
+    if (hasBounds) allBoundsPts.push(flippedLeft!, flippedRight!);
     for (const pts of allBoundsPts) {
       for (const p of pts) {
         minX = Math.min(minX, p.x);
@@ -131,8 +135,8 @@ export const AnalyseTrackMap = forwardRef<TrackMapHandle, {
 
     // Draw track boundary surface
     if (hasBounds) {
-      const left = boundaries!.leftEdge;
-      const right = boundaries!.rightEdge;
+      const left = flippedLeft!;
+      const right = flippedRight!;
       ctx.beginPath();
       const [lx0, ly0] = toCanvas(left[0].x, left[0].z);
       ctx.moveTo(lx0, ly0);

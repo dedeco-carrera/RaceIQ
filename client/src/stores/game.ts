@@ -1,11 +1,13 @@
 import { create } from "zustand";
 import type { GameId } from "@shared/types";
+import { useTelemetryStore } from "./telemetry";
 
 /** Map gameId → route path segment. Derived from each adapter's routePrefix. */
 const GAME_ROUTES: Record<string, string> = {
   "fm-2023": "/fm23",
   "f1-2025": "/f125",
   "acc": "/acc",
+  "ac-evo": "/ac-evo",
 };
 
 interface GameState {
@@ -13,9 +15,16 @@ interface GameState {
   setGameId: (id: GameId | null) => void;
 }
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   gameId: null,
-  setGameId: (gameId) => set({ gameId }),
+  setGameId: (gameId) => {
+    const prev = get().gameId;
+    set({ gameId });
+    // Clear stale session laps when switching between games
+    if (prev && gameId && prev !== gameId) {
+      useTelemetryStore.getState().setSessionLaps([]);
+    }
+  },
 }));
 
 export function useGameId(): GameId | null {

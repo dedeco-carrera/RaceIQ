@@ -8,6 +8,7 @@ import { tireTempColorHex } from "../lib/vehicle-dynamics";
 import { useUnits } from "../hooks/useUnits";
 import { useSettings } from "../hooks/queries";
 import { useGameId } from "../stores/game";
+import { needsTrackFlip, flipBoundaries } from "../lib/track-coords";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { recordGpuSnapshot } from "../lib/crash-diagnostics";
 import { type ViewPreset, VIEW_PRESETS, type ViewToggles, DEFAULT_TOGGLES } from "../lib/wireframe-data";
@@ -99,6 +100,11 @@ export const CarWireframe = React.memo(function CarWireframe({
   };
   const [viewPreset, setViewPreset] = useState<ViewPreset>("3/4");
 
+  const flippedBoundaries = useMemo(() => {
+    if (!boundaries) return null;
+    return needsTrackFlip(gameId) ? flipBoundaries(boundaries) : boundaries;
+  }, [boundaries, gameId]);
+
   const toggle = (key: keyof ViewToggles) =>
     setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -163,7 +169,7 @@ export const CarWireframe = React.memo(function CarWireframe({
           };
         }}
       >
-        <CarScene gameId={gameId} packet={packet} telemetry={telemetry} cursorIdx={cursorIdx} outline={outline} boundaries={boundaries ?? null} toggles={toggles} viewPreset={viewPreset} carModel={carModel} modelOffsetX={modelOffsetX} fmtTemp={fmtTemp} hideModelWheels={!minimal} suspThresholds={suspThresholds} autoOrbit={autoOrbit} tireColors={[
+        <CarScene gameId={gameId} packet={packet} telemetry={telemetry} cursorIdx={cursorIdx} outline={outline} boundaries={flippedBoundaries} toggles={toggles} viewPreset={viewPreset} carModel={carModel} modelOffsetX={modelOffsetX} fmtTemp={fmtTemp} hideModelWheels={!minimal} suspThresholds={suspThresholds} autoOrbit={autoOrbit} tireColors={[
           tireTempColorHex(units.toTempC(packet.TireTempFL), units.thresholds),
           tireTempColorHex(units.toTempC(packet.TireTempFR), units.thresholds),
           tireTempColorHex(units.toTempC(packet.TireTempRL), units.thresholds),

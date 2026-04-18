@@ -25,24 +25,31 @@ export interface TripletProcessor {
 export class StatusCheckProcessor implements TripletProcessor {
   private onDisconnect: () => Promise<void>;
   private loggedInvalidStatus = false;
-  constructor(onDisconnect: () => Promise<void>) {
+  private label: string;
+  private disconnectOnOff: boolean;
+  constructor(onDisconnect: () => Promise<void>, label = "ACC", disconnectOnOff = true) {
     this.onDisconnect = onDisconnect;
+    this.label = label;
+    this.disconnectOnOff = disconnectOnOff;
   }
 
   async process(triplet: { physics: Buffer; graphics: Buffer; staticData: Buffer }): Promise<boolean> {
     const status = triplet.graphics.readInt32LE(GRAPHICS.status.offset);
     if (status !== AC_STATUS.AC_LIVE) {
       if (!this.loggedInvalidStatus) {
-        console.log(`[ACC StatusCheck] Invalid status: ${status} (AC_LIVE=${AC_STATUS.AC_LIVE}, AC_OFF=${AC_STATUS.AC_OFF})`);
+        console.log(`[${this.label} StatusCheck] Invalid status: ${status} (AC_LIVE=${AC_STATUS.AC_LIVE}, AC_OFF=${AC_STATUS.AC_OFF})`);
         this.loggedInvalidStatus = true;
       }
-      if (status === AC_STATUS.AC_OFF) {
-        console.log("[ACC StatusCheck] AC_OFF detected, disconnecting");
+      if (status === AC_STATUS.AC_OFF && this.disconnectOnOff) {
+        console.log(`[${this.label} StatusCheck] AC_OFF detected, disconnecting`);
         await this.onDisconnect();
       }
-      return false; // halt pipeline
+      return false; // halt pipeline for this frame; reader keeps polling
     }
     // Status is valid, pipeline continues
+    if (this.loggedInvalidStatus) {
+      console.log(`[${this.label} StatusCheck] Status now AC_LIVE, resuming`);
+    }
     this.loggedInvalidStatus = false;
     return true;
   }
@@ -52,15 +59,15 @@ export class StatusCheckProcessor implements TripletProcessor {
  * DumpToBinProcessor: writes raw buffers to .bin file (recording mode).
  */
 export class DumpToBinProcessor implements TripletProcessor {
-  private accRecorder: any;
-  constructor(accRecorder: any) {
-    this.accRecorder = accRecorder;
+  private recorder: any;
+  constructor(recorder: any) {
+    this.recorder = recorder;
   }
 
   async process(triplet: { physics: Buffer; graphics: Buffer; staticData: Buffer }): Promise<void> {
-    this.accRecorder.writePhysics(triplet.physics);
-    this.accRecorder.writeGraphics(triplet.graphics);
-    this.accRecorder.writeStatic(triplet.staticData);
+    this.recorder.writePhysics(triplet.physics);
+    this.recorder.writeGraphics(triplet.graphics);
+    this.recorder.writeStatic(triplet.staticData);
   }
 }
 
@@ -70,9 +77,20 @@ export class DumpToBinProcessor implements TripletProcessor {
 export class ParsingProcessor implements TripletProcessor {
   private carOrdinal: number;
   private trackOrdinal: number;
-  constructor(carOrdinal: number, trackOrdinal: number, _accRecorder?: any) {
+  private gameId: import("../../../shared/types").GameId;
+  private label: string;
+
+  constructor(
+    carOrdinal: number,
+    trackOrdinal: number,
+    _accRecorder?: any,
+    gameId: import("../../../shared/types").GameId = "acc",
+    label = "ACC",
+  ) {
     this.carOrdinal = carOrdinal;
     this.trackOrdinal = trackOrdinal;
+    this.gameId = gameId;
+    this.label = label;
   }
 
   async process(triplet: { physics: Buffer; graphics: Buffer; staticData: Buffer }): Promise<void> {
@@ -80,12 +98,13 @@ export class ParsingProcessor implements TripletProcessor {
       const packet = parseAccBuffers(triplet.physics, triplet.graphics, triplet.staticData, {
         carOrdinal: this.carOrdinal,
         trackOrdinal: this.trackOrdinal,
+        gameId: this.gameId,
       });
       if (packet) {
         await processPacket(packet);
       }
     } catch (err) {
-      console.error("[ACC ParsingProcessor] Error:", err instanceof Error ? err.message : err);
+      console.error(`[${this.label} ParsingProcessor] Error:`, err instanceof Error ? err.message : err);
       throw err;
     }
   }

@@ -11,6 +11,11 @@ import { readWString } from "../games/acc/utils";
 import { STATIC } from "../games/acc/structs";
 import { getAccCarByModel } from "../../shared/acc-car-data";
 import { getAccTrackByName } from "../../shared/acc-track-data";
+import { parseAcEvoBuffers, createAcEvoParserCache } from "../games/ac-evo/parser";
+import { GRAPHICS_EVO, STATIC_EVO } from "../games/ac-evo/structs";
+import { readCString } from "../games/ac-evo/utils";
+import { getAcEvoCarByDisplayName } from "../../shared/ac-evo-car-data";
+import { getAcEvoTrackByName } from "../../shared/ac-evo-track-data";
 import { KNOWN_GAME_IDS, type GameId, type TelemetryPacket, type LapMeta } from "../../shared/types";
 import { getGame } from "../../shared/games/registry";
 import { Pipeline } from "../pipeline";
@@ -469,8 +474,9 @@ devRoutes.post("/api/dev/import-dump", async (c) => {
     }
 
     const uploadName = file.name || "upload.bin";
-    if (!uploadName.toLowerCase().endsWith(".bin")) {
-      return c.json({ error: "Expected a .bin file" }, 400);
+    const lowerName = uploadName.toLowerCase();
+    if (!lowerName.endsWith(".bin") && !lowerName.endsWith(".bin.gz")) {
+      return c.json({ error: "Expected a .bin or .bin.gz file" }, 400);
     }
 
     const gameId = detectGameIdFromFilename(uploadName);
@@ -485,13 +491,19 @@ devRoutes.post("/api/dev/import-dump", async (c) => {
 
     // Write to temp file — readAccFrames and the UDP reader both take a path
     const os = await import("os");
+    const { gunzipSync } = await import("zlib");
     const { writeFileSync, unlinkSync } = await import("fs");
     tmpPath = resolve(
       os.tmpdir(),
       `raceiq-dump-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`
     );
     const arrayBuf = await file.arrayBuffer();
-    writeFileSync(tmpPath, Buffer.from(arrayBuf));
+    let bytes = Buffer.from(arrayBuf);
+    // Decompress if gzip magic bytes detected (1f 8b), regardless of extension
+    if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      bytes = Buffer.from(gunzipSync(bytes));
+    }
+    writeFileSync(tmpPath, bytes);
 
     const packets: TelemetryPacket[] = [];
     let carModel: string | null = null;
@@ -514,6 +526,35 @@ devRoutes.post("/api/dev/import-dump", async (c) => {
           if (tn) { trackName = tn; trackOrdinal = getAccTrackByName(tn)?.id ?? 0; }
         }
         const packet = parseAccBuffers(frame.physics, frame.graphics, frame.staticData, { carOrdinal, trackOrdinal });
+        if (packet) packets.push(packet);
+      }
+    } else if (gameId === "ac-evo") {
+      let frames: { physics: Buffer; graphics: Buffer; staticData: Buffer }[];
+      try {
+        frames = readAccFrames(tmpPath);
+      } catch (e) {
+        return c.json({ error: "Failed to read AC Evo frames", details: String(e) }, 400);
+      }
+      const cache = createAcEvoParserCache();
+      for (const frame of frames) {
+        // Extract display names for the result UI (cache handles ordinal resolution internally)
+        if (!carModel && frame.graphics.length >= GRAPHICS_EVO.car_model.offset + GRAPHICS_EVO.car_model.size) {
+          const cm = readCString(frame.graphics, GRAPHICS_EVO.car_model.offset, GRAPHICS_EVO.car_model.size);
+          if (cm) {
+            carModel = cm;
+            const car = getAcEvoCarByDisplayName(cm);
+            if (car) cache.carOrdinal = car.id;
+          }
+        }
+        if (!trackName && frame.staticData.length >= STATIC_EVO.track.offset + STATIC_EVO.track.size) {
+          const tn = readCString(frame.staticData, STATIC_EVO.track.offset, STATIC_EVO.track.size);
+          if (tn) {
+            trackName = tn;
+            const track = getAcEvoTrackByName(tn);
+            if (track) cache.trackOrdinal = track.id;
+          }
+        }
+        const packet = parseAcEvoBuffers(frame.physics, frame.graphics, frame.staticData, cache);
         if (packet) packets.push(packet);
       }
     } else {

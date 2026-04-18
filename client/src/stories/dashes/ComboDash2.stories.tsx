@@ -7,6 +7,7 @@ import {
   fakeForzaPacket,
   fakeF1Packet,
   fakeAccPacket,
+  fakeAcEvoPacket,
   generateFakeSessionLaps,
 } from "../fakeData";
 import type { TelemetryPacket, GameId } from "@shared/types";
@@ -18,12 +19,13 @@ const queryClient = new QueryClient({
 
 const MAX_LAPS = 100;
 
-type Game = "fm-2023" | "f1-2025" | "acc";
+type Game = "fm-2023" | "f1-2025" | "acc" | "ac-evo";
 
 const PACKETS: Record<Game, TelemetryPacket> = {
   "fm-2023": fakeForzaPacket,
   "f1-2025": fakeF1Packet,
   acc: fakeAccPacket,
+  "ac-evo": fakeAcEvoPacket,
 };
 
 function withRouter(node: React.ReactNode) {
@@ -68,7 +70,6 @@ function render({ game, lapCount }: Args) {
         {withRouter(
           <ComboDash2
             rawPacket={rawPacket}
-            allLaps={laps}
             sessionLaps={laps}
           />,
         )}
@@ -88,7 +89,7 @@ const meta: Meta<Args> = {
     game: {
       name: "Game",
       control: { type: "radio" },
-      options: ["fm-2023", "f1-2025", "acc"] satisfies Game[],
+      options: ["fm-2023", "f1-2025", "acc", "ac-evo"] satisfies Game[],
     },
     lapCount: {
       name: "Laps",
@@ -107,11 +108,12 @@ type Story = StoryObj<Args>;
 export const FM2023: Story = { name: "FM 2023", args: { game: "fm-2023" }, render };
 export const F12025: Story = { name: "F1 2025", args: { game: "f1-2025" }, render };
 export const ACC: Story = { name: "ACC", args: { game: "acc" }, render };
+export const ACEvo: Story = { name: "AC Evo", args: { game: "ac-evo" }, render };
 
 export const NoData: Story = {
   render: () => (
     <div style={{ width: "100vw", height: "100vh", background: "#000" }}>
-      <ComboDash2 rawPacket={null} allLaps={[]} sessionLaps={[]} />
+      <ComboDash2 rawPacket={null} sessionLaps={[]} />
     </div>
   ),
 };

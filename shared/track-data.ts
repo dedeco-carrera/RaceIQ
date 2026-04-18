@@ -54,6 +54,22 @@ function ensureAccNames() {
   }
 }
 
+/** AC Evo ordinal → bundled file name, built lazily from tracks.csv. */
+let _acEvoNamesBuilt = false;
+const acEvoOrdinalToFileName = new Map<number, string>();
+function ensureAcEvoNames() {
+  if (_acEvoNamesBuilt) return;
+  _acEvoNamesBuilt = true;
+  const raw = readDataFile(resolve(SHARED_DIR, "games", "ac-evo", "tracks.csv"));
+  for (const line of (raw ?? "").split("\n")) {
+    const parts = line.trim().split(",");
+    const ordinal = parseInt(parts[0], 10);
+    if (isNaN(ordinal)) continue;
+    const commonName = parts[3]?.trim();
+    if (commonName) acEvoOrdinalToFileName.set(ordinal, commonName);
+  }
+}
+
 /** Resolve ordinal to bundled file prefix (e.g. f1: 5 → "monaco", fm: 21 → "silverstone-21"). */
 function getBundledTrackName(gameId: string, ordinal: number): string | undefined {
   if (gameId === "f1-2025") return getF1TrackInfo(ordinal)?.commonTrackName || undefined;
@@ -64,6 +80,10 @@ function getBundledTrackName(gameId: string, ordinal: number): string | undefine
   if (gameId === "acc") {
     ensureAccNames();
     return accOrdinalToFileName.get(ordinal);
+  }
+  if (gameId === "ac-evo") {
+    ensureAcEvoNames();
+    return acEvoOrdinalToFileName.get(ordinal);
   }
   return undefined;
 }
@@ -117,6 +137,12 @@ function userGameDir(gameId: string): string {
 
 /** Bundled extracted track data per game (boundaries, centerlines). */
 function bundledGameDir(gameId: string): string {
+  // AC Evo ships no bundled track outline data of its own. Its tracks are
+  // the same Kunos circuits ACC ships, so reuse ACC's centerline/boundary
+  // files rather than duplicating them. `shared/games/ac-evo/tracks.csv`
+  // is a strict subset of ACC's commonTrackName set, so every AC Evo track
+  // resolves to an existing ACC file.
+  if (gameId === "ac-evo") return resolve(SHARED_DIR, "tracks", "acc");
   return resolve(SHARED_DIR, "tracks", gameId);
 }
 
@@ -586,7 +612,7 @@ export function getTrackBoundariesByOrdinal(ordinal: number, gameId: string): Tr
 
 /** Compute Procrustes transform (scale + rotation + translation) from src to tgt.
  *  Tries both normal and Z-flipped source, picks whichever has lower error. */
-function computeAlignment(src: Point[], tgt: Point[]): { scale: number; cos: number; sin: number; tx: number; tz: number; flipZ: boolean; flipX: boolean } | null {
+export function computeAlignment(src: Point[], tgt: Point[]): { scale: number; cos: number; sin: number; tx: number; tz: number; flipZ: boolean; flipX: boolean } | null {
   if (src.length < 5 || tgt.length < 5) return null;
   const n = Math.min(100, Math.min(src.length, tgt.length));
   const sample = (pts: Point[]) => {
@@ -673,7 +699,7 @@ function computeAlignment(src: Point[], tgt: Point[]): { scale: number; cos: num
   return best ? { scale: best.scale, cos: best.cos, sin: best.sin, tx: best.tx, tz: best.tz, flipZ: best.flipZ, flipX: best.flipX } : null;
 }
 
-function applyAlignment(p: Point, a: { scale: number; cos: number; sin: number; tx: number; tz: number; flipZ: boolean; flipX: boolean }): Point {
+export function applyAlignment(p: Point, a: { scale: number; cos: number; sin: number; tx: number; tz: number; flipZ: boolean; flipX: boolean }): Point {
   const px = a.flipX ? -p.x : p.x;
   const pz = a.flipZ ? -p.z : p.z;
   return { x: a.scale * (a.cos * px - a.sin * pz) + a.tx, z: a.scale * (a.sin * px + a.cos * pz) + a.tz };
@@ -684,7 +710,13 @@ function loadExtractedBoundary(ordinal: number, gameId: string): TrackBoundary |
   const userExtracted = resolve(userGameDir(gameId), "extracted", `boundaries-${ordinal}.json`);
   const trackName = getBundledTrackName(gameId, ordinal);
   const bundledFile = trackName ? resolve(bundledGameDir(gameId), `${trackName}-boundaries.json`) : null;
-  const content = readDataFile(userExtracted) ?? (bundledFile ? readDataFile(bundledFile) : null);
+  // AC Evo and ACC share the same Kunos coord space and the same track geometry
+  // for common layouts. Reuse ACC's bundled boundary files for AC Evo when we
+  // don't have an AC Evo-specific file.
+  const accFallback = gameId === "ac-evo" && trackName ? resolve(bundledGameDir("acc"), `${trackName}-boundaries.json`) : null;
+  const content = readDataFile(userExtracted)
+    ?? (bundledFile ? readDataFile(bundledFile) : null)
+    ?? (accFallback ? readDataFile(accFallback) : null);
   if (!content) return null;
   try {
     const data = JSON.parse(content);
@@ -694,8 +726,11 @@ function loadExtractedBoundary(ordinal: number, gameId: string): TrackBoundary |
     let pit: Point[] | null = data.pitLane ?? null;
 
     // If alignment was poor, transform boundaries to match telemetry outline.
-    // ACC coordinates are pre-aligned (same space as telemetry), skip.
-    if (!data.aligned && data.coordSystem !== "acc") {
+    // ACC's extracted boundaries are already in telemetry coordinate space.
+    // AC Evo reuses ACC boundary files but may have a different world origin,
+    // so it must NOT be marked pre-aligned — it needs Procrustes alignment.
+    const isPreAligned = data.aligned || data.coordSystem === "acc" || gameId === "acc";
+    if (!isPreAligned) {
       const extContent = readUserOrBundled(gameId, `extracted/recorded-${ordinal}.csv`);
       const caName = computedAverageFileName(gameId, ordinal);
       const telContent = readDataFile(resolve(userGameDir(gameId), `${caName}.csv`));
@@ -822,7 +857,9 @@ export function recordLapTrace(ordinal: number, trace: Point[], startLinePos: Po
 
   // If an extracted (game-file) outline already exists, don't overwrite it
   // with telemetry recordings — the game data is higher quality.
-  if (hasExtractedOutline(ordinal, gameId)) return;
+  // Exception: AC Evo reuses ACC's extracted outlines but still needs its own
+  // telemetry recording for boundary alignment (different coordinate space).
+  if (hasExtractedOutline(ordinal, gameId) && gameId !== "ac-evo") return;
 
   // Filter outlier points from the trace (pit lane teleports, rewind jumps)
   trace = filterOutlierPoints(trace);
