@@ -10,11 +10,14 @@
  * The parser auto-detects whether incoming packets are Forza Dash (324 bytes)
  * or F1 2025 format based on packet structure and header signatures.
  */
+import { resolve } from "path";
 import { parsePacket } from "./parser";
 import { wsManager } from "./ws";
 import { processPacket } from "./pipeline";
 import { getRunningGame } from "./games/registry";
 import { lapDetector } from "./pipeline";
+import { UdpRecorder } from "./udp-recorder";
+import type { GameId } from "../shared/types";
 
 const MIN_PACKET_LENGTH = 29; // Minimum: F1 header size
 const PACKETS_PER_SEC_WINDOW = 1000; // 1-second sliding window for rate display
@@ -30,6 +33,8 @@ class UdpListener {
   private _socket: { stop(): void } | null = null;
   private _port = 5301;
   private _hostname = "0.0.0.0";
+  private _recorder: UdpRecorder | null = null;
+  private _recordingGameId: GameId | null = null;
 
   get droppedPackets(): number {
     return this._droppedPackets;
@@ -55,10 +60,29 @@ class UdpListener {
     return this._hostname;
   }
 
+  /**
+   * Pin a recording gameId. When set, `start()` opens a timestamped .bin file
+   * under test/artifacts/laps/ and every incoming datagram is appended to it
+   * (in addition to the normal parse → pipeline → DB/WS flow). Mirrors how the
+   * AccSharedMemoryReader/AcEvoSharedMemoryReader constructors create their
+   * .bin files when `recordingOnly=true`. Used by `dev:dump:fm` / `dev:dump:f1`.
+   */
+  setRecordingGameId(gameId: GameId | null): void {
+    this._recordingGameId = gameId;
+  }
+
   async start(port: number = 5301, hostname: string = "0.0.0.0"): Promise<void> {
     this._port = port;
     this._hostname = hostname;
     console.log(`[UDP] Starting listener on ${hostname}:${port}...`);
+
+    if (this._recordingGameId && !this._recorder) {
+      const dir = resolve(process.cwd(), "test", "artifacts", "laps");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filePath = resolve(dir, `${this._recordingGameId}-${timestamp}.bin`);
+      this._recorder = new UdpRecorder();
+      this._recorder.start(filePath);
+    }
 
     // Use dgram for socket buffer tuning — Bun.udpSocket doesn't expose setsockopt
     const dgram = require("dgram");
@@ -124,6 +148,10 @@ class UdpListener {
       return;
     }
 
+    // Append raw datagrams to the dump BEFORE parsing so recordings preserve
+    // the exact wire format (including any packets parsePacket would skip).
+    this._recorder?.writePacket(buf);
+
     // Returns null when game is paused/in menus (IsRaceOn == 0)
     const packet = parsePacket(buf);
     if (!packet) {
@@ -134,16 +162,23 @@ class UdpListener {
     await processPacket(packet);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (this._socket) {
       this._socket.stop();
       this._socket = null;
       console.log("[UDP] Listener stopped");
     }
+    if (this._recorder) {
+      // Await the flush on a clean shutdown. The format is append-only, so
+      // even a hard kill only risks the last packet being truncated — but
+      // waiting here means `Ctrl+C` produces a complete file.
+      await this._recorder.stop();
+      this._recorder = null;
+    }
   }
 
   async restart(port: number, hostname?: string): Promise<void> {
-    this.stop();
+    await this.stop();
     this._droppedPackets = 0;
     this._totalPackets = 0;
     this._receiving = false;
