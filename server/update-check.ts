@@ -89,7 +89,6 @@ interface GitHubRelease {
 /** Strip GitHub auto-generated boilerplate from release notes. */
 function cleanReleaseNotes(body: string): string {
   return body
-    .replace(/^#+\s*What's Changed\s*\n*/im, "")
     .replace(/\n*\*\*Full Changelog\*\*:.*$/im, "")
     .trim();
 }
