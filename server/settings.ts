@@ -17,6 +17,7 @@ const AppSettingsSchema = z.object({
   driverName: z.string().default(""),
   udpPort: z.number().int().min(1024).max(65535).default(5301),
   unit: z.enum(["metric", "imperial"]).default("metric"),
+  temperatureUnit: z.enum(["C", "F"]).default("C"),
   aiProvider: AiProviderSchema.default("gemini"),
   aiModel: z.string().default("gemini-flash-latest"),
   chatProvider: ChatProviderSchema.default("gemini"),
@@ -55,9 +56,12 @@ export function loadSettings(): AppSettings {
     const raw = readFileSync(SETTINGS_PATH, "utf-8");
     const parsed = JSON.parse(raw);
 
-    // Migrate legacy speedUnit/temperatureUnit → unit
+    // Migrate legacy speedUnit/temperatureUnit → unit + temperatureUnit
     if (!parsed.unit && parsed.speedUnit) {
       parsed.unit = parsed.speedUnit === "mph" ? "imperial" : "metric";
+    }
+    if (parsed.temperatureUnit !== "C" && parsed.temperatureUnit !== "F") {
+      parsed.temperatureUnit = parsed.unit === "imperial" ? "F" : "C";
     }
     // Migrate legacy claude-cli provider → gemini
     if (parsed.aiProvider === "claude-cli") {

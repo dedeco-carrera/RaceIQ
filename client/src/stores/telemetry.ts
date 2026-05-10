@@ -4,6 +4,7 @@ import { convertPacket, type DisplayPacket } from "../lib/convert-packet";
 
 export interface DisplaySettings {
   unit: "metric" | "imperial";
+  temperatureUnit: "C" | "F";
   aiProvider: "gemini" | "openai" | "local";
   aiModel: string;
   chatProvider: "gemini" | "openai" | "local";
@@ -32,6 +33,7 @@ export interface DisplaySettings {
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   unit: "metric",
+  temperatureUnit: "C",
   aiProvider: "gemini",
   aiModel: "",
   chatProvider: "gemini",
@@ -65,7 +67,11 @@ export interface ServerStatus {
   droppedPackets: number;
   udpPort: number;
   detectedGame: { id: string; name: string } | null;
-  currentSession: { id: number; carOrdinal: number; trackOrdinal: number } | null;
+  currentSession: {
+    id: number;
+    carOrdinal: number;
+    trackOrdinal: number;
+  } | null;
 }
 
 interface TelemetryState {
@@ -87,12 +93,17 @@ interface TelemetryState {
   sectors: LiveSectorData | null;
   /** Server-computed pit strategy data */
   pit: LivePitData | null;
-  /** Current unit system */
+  /** Current speed/distance unit system */
   unitSystem: "metric" | "imperial";
+  /** Current temperature unit */
+  temperatureUnit: "C" | "F";
   /** Version string if a server update is available, null otherwise */
   updateAvailable: string | null;
   /** Update progress tracking */
-  updateProgress: { stage: "downloading" | "installing" | "reconnecting" | "complete"; percent: number } | null;
+  updateProgress: {
+    stage: "downloading" | "installing" | "reconnecting" | "complete";
+    percent: number;
+  } | null;
   /** Cached version info from /api/version */
   versionInfo: VersionInfo | null;
   /** Server-pushed recorded laps for the current session's track+car */
@@ -119,12 +130,13 @@ interface TelemetryState {
   devStatePaused: boolean;
   setDevState: (state: unknown) => void;
   toggleDevStatePause: () => void;
-  /** Update unit system — re-converts current packet */
-  setUnitSystem: (unit: "metric" | "imperial") => void;
+  /** Update display units — re-converts current packet */
+  setDisplayUnits: (unit: "metric" | "imperial", temperatureUnit: "C" | "F") => void;
 }
 
-function speedUnit(u: "metric" | "imperial") { return u === "metric" ? "kmh" as const : "mph" as const; }
-function tempUnit(u: "metric" | "imperial") { return u === "metric" ? "C" as const : "F" as const; }
+function speedUnit(u: "metric" | "imperial") {
+  return u === "metric" ? ("kmh" as const) : ("mph" as const);
+}
 
 export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   connected: false,
@@ -138,6 +150,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   isRaceOn: false,
   lastUdpAt: 0,
   unitSystem: "metric",
+  temperatureUnit: "C",
   updateAvailable: null,
   updateProgress: null,
   versionInfo: null,
@@ -146,42 +159,58 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   reprocessProgress: null,
   devState: null,
   devStatePaused: false,
-  setConnected: (connected) => set((prev) => {
-    // Detect reconnection after update install
-    if (connected && prev.updateProgress?.stage === "reconnecting") {
-      return { connected, updateProgress: { stage: "complete", percent: 100 }, updateAvailable: null };
-    }
-    return { connected };
-  }),
+  setConnected: (connected) =>
+    set((prev) => {
+      // Detect reconnection after update install
+      if (connected && prev.updateProgress?.stage === "reconnecting") {
+        return {
+          connected,
+          updateProgress: { stage: "complete", percent: 100 },
+          updateAvailable: null,
+        };
+      }
+      return { connected };
+    }),
   setSectors: (sectors) => set({ sectors }),
   setPit: (pit) => set({ pit }),
   setSessionLaps: (sessionLaps) => set({ sessionLaps }),
   setPacket: (raw) => {
-    const { unitSystem } = get();
+    const { unitSystem, temperatureUnit } = get();
     set({
       rawPacket: raw,
-      packet: convertPacket(raw, speedUnit(unitSystem), tempUnit(unitSystem)),
+      packet: convertPacket(raw, speedUnit(unitSystem), temperatureUnit),
     });
   },
   clearPacket: () => set({ rawPacket: null, packet: null }),
   setPacketsPerSec: (packetsPerSec) => set({ packetsPerSec }),
-  setServerStatus: (status: ServerStatus | null) => set(status ? {
-    serverStatus: status,
-    udpPps: status.udpPps,
-    isRaceOn: status.isRaceOn,
-    lastUdpAt: status.udpPps > 0 ? Date.now() : get().lastUdpAt,
-  } : {
-    serverStatus: null,
-    udpPps: 0,
-    isRaceOn: false,
-  }),
+  setServerStatus: (status: ServerStatus | null) =>
+    set(
+      status
+        ? {
+            serverStatus: status,
+            udpPps: status.udpPps,
+            isRaceOn: status.isRaceOn,
+            lastUdpAt: status.udpPps > 0 ? Date.now() : get().lastUdpAt,
+          }
+        : {
+            serverStatus: null,
+            udpPps: 0,
+            isRaceOn: false,
+          },
+    ),
   setUpdateAvailable: (version) => set({ updateAvailable: version }),
   setStaleLapDetection: (data) => set({ staleLapDetection: data }),
   setReprocessProgress: (progress) => set({ reprocessProgress: progress }),
-  incrementReprocessProgress: () => set((prev) => {
-    if (!prev.reprocessProgress) return {};
-    return { reprocessProgress: { ...prev.reprocessProgress, done: prev.reprocessProgress.done + 1 } };
-  }),
+  incrementReprocessProgress: () =>
+    set((prev) => {
+      if (!prev.reprocessProgress) return {};
+      return {
+        reprocessProgress: {
+          ...prev.reprocessProgress,
+          done: prev.reprocessProgress.done + 1,
+        },
+      };
+    }),
   setUpdateProgress: (progress) => set({ updateProgress: progress }),
   setVersionInfo: (info) => set({ versionInfo: info }),
   setDevState: (state) => {
@@ -189,11 +218,12 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     set({ devState: state });
   },
   toggleDevStatePause: () => set((prev) => ({ devStatePaused: !prev.devStatePaused })),
-  setUnitSystem: (unit) => {
+  setDisplayUnits: (unit, temperatureUnit) => {
     const { rawPacket } = get();
     set({
       unitSystem: unit,
-      packet: rawPacket ? convertPacket(rawPacket, speedUnit(unit), tempUnit(unit)) : null,
+      temperatureUnit,
+      packet: rawPacket ? convertPacket(rawPacket, speedUnit(unit), temperatureUnit) : null,
     });
   },
 }));

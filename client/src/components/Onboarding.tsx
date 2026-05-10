@@ -7,16 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useTelemetryStore } from "../stores/telemetry";
 import { useSettings, useSaveSettings } from "../hooks/queries";
 import type { TelemetryPacket } from "@shared/types";
-import {
-  getWheelStyle,
-  getSoundEnabled,
-  setSoundEnabled,
-  getSoundVolume,
-  setSoundVolume,
-  getSoundType,
-  setSoundType,
-  SOUND_PRESETS,
-} from "./Settings";
+import { getWheelStyle, getSoundEnabled, setSoundEnabled, getSoundVolume, setSoundVolume, getSoundType, setSoundType, SOUND_PRESETS } from "./Settings";
 import { playBlip, preloadSound } from "./SectorTimes";
 import { SiDiscord, SiGithub } from "react-icons/si";
 import { CarWireframe } from "./CarWireframe";
@@ -36,9 +27,12 @@ function WelcomeViewport({ telemetry }: { telemetry: TelemetryPacket[] }) {
   useQuery({
     queryKey: ["track-outline", trackOrdinal],
     queryFn: async () => {
-      const res = await client.api["track-outline"][":ordinal"].$get({ param: { ordinal: String(trackOrdinal) }, query: { gameId: "fm-2023" } });
+      const res = await client.api["track-outline"][":ordinal"].$get({
+        param: { ordinal: String(trackOrdinal) },
+        query: { gameId: "fm-2023" },
+      });
       if (!res.ok) return null;
-      const d = await res.json() as Record<string, unknown>;
+      const d = (await res.json()) as Record<string, unknown>;
       if (d?.points && Array.isArray(d.points)) return d.points as { x: number; z: number }[];
       if (Array.isArray(d)) return d as { x: number; z: number }[];
       return null;
@@ -51,7 +45,10 @@ function WelcomeViewport({ telemetry }: { telemetry: TelemetryPacket[] }) {
   const { data: boundaries } = useQuery({
     queryKey: ["track-boundaries", trackOrdinal],
     queryFn: async () => {
-      const res = await client.api["track-boundaries"][":ordinal"].$get({ param: { ordinal: String(trackOrdinal) }, query: { gameId: "fm-2023" } });
+      const res = await client.api["track-boundaries"][":ordinal"].$get({
+        param: { ordinal: String(trackOrdinal) },
+        query: { gameId: "fm-2023" },
+      });
       if (!res.ok) return null;
       return res.json();
     },
@@ -209,25 +206,13 @@ export function StepWelcome() {
         </div>
       )}
 
-      <h2 className="text-2xl font-bold text-app-text mb-1 tracking-tight">
-        RaceIQ
-      </h2>
-      {versionInfo?.current && (
-        <div className="text-xs font-mono text-app-text-muted mb-2">v{versionInfo.current}</div>
-      )}
-      <p className="text-sm text-app-text-muted max-w-sm leading-relaxed">
-        The most advanced sim racing telemetry dashboard.
-      </p>
+      <h2 className="text-2xl font-bold text-app-text mb-1 tracking-tight">RaceIQ</h2>
+      {versionInfo?.current && <div className="text-xs font-mono text-app-text-muted mb-2">v{versionInfo.current}</div>}
+      <p className="text-sm text-app-text-muted max-w-sm leading-relaxed">The most advanced sim racing telemetry dashboard.</p>
       <div className="flex items-center gap-2 mt-5">
-        <span className="px-2.5 py-1 rounded-full border border-app-border bg-app-surface-alt text-xs text-app-text-secondary">
-          Live telemetry
-        </span>
-        <span className="px-2.5 py-1 rounded-full border border-app-border bg-app-surface-alt text-xs text-app-text-secondary">
-          Lap comparison
-        </span>
-        <span className="px-2.5 py-1 rounded-full border border-app-border bg-app-surface-alt text-xs text-app-text-secondary">
-          AI analysis
-        </span>
+        <span className="px-2.5 py-1 rounded-full border border-app-border bg-app-surface-alt text-xs text-app-text-secondary">Live telemetry</span>
+        <span className="px-2.5 py-1 rounded-full border border-app-border bg-app-surface-alt text-xs text-app-text-secondary">Lap comparison</span>
+        <span className="px-2.5 py-1 rounded-full border border-app-border bg-app-surface-alt text-xs text-app-text-secondary">AI analysis</span>
       </div>
     </div>
   );
@@ -245,7 +230,9 @@ export function StepProfile() {
   const committedName = useRef(serverName);
 
   // Keep latestName ref in sync via effect (not during render)
-  useEffect(() => { latestName.current = name; }, [name]);
+  useEffect(() => {
+    latestName.current = name;
+  }, [name]);
 
   // Populate from server once loaded (if still empty)
   useEffect(() => {
@@ -263,7 +250,7 @@ export function StepProfile() {
         saveSettings.mutate({ driverName: trimmed });
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleBlur = () => {
@@ -277,17 +264,19 @@ export function StepProfile() {
   return (
     <div>
       <h2 className="text-sm font-semibold text-app-text mb-1">What's your name?</h2>
-      <p className="text-sm text-app-text-muted mb-4">
-        Used to identify your laps when sharing exports with other drivers.
-      </p>
+      <p className="text-sm text-app-text-muted mb-4">Used to identify your laps when sharing exports with other drivers.</p>
       <div className="flex flex-col gap-1">
-        <Label htmlFor="driver-name" className="text-xs text-app-text-muted">Driver name</Label>
+        <Label htmlFor="driver-name" className="text-xs text-app-text-muted">
+          Driver name
+        </Label>
         <Input
           id="driver-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={handleBlur}
-          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
           placeholder="e.g. Max Verstappen"
           className="max-w-xs"
           autoFocus
@@ -304,7 +293,11 @@ export function StepWheel() {
   const [wheels, setWheels] = useState<Array<{ id: string; name: string; src: string }>>([]);
 
   useEffect(() => {
-    client.api.wheels.$get().then(r => r.json()).then(setWheels).catch(() => {});
+    client.api.wheels
+      .$get()
+      .then((r) => r.json())
+      .then(setWheels)
+      .catch(() => {});
   }, []);
 
   function select(src: string) {
@@ -316,9 +309,7 @@ export function StepWheel() {
 
   return (
     <div>
-      <h2 className="text-sm font-semibold text-app-text mb-1">
-        Choose the steering wheel displayed during live telemetry.
-      </h2>
+      <h2 className="text-sm font-semibold text-app-text mb-1">Choose the steering wheel displayed during live telemetry.</h2>
       <p className="text-xs text-app-text-muted mb-4">
         Add your own by placing images in <code className="bg-app-surface-alt px-1 py-0.5 rounded">client/public/wheels/</code>
       </p>
@@ -328,9 +319,7 @@ export function StepWheel() {
             key={w.id}
             onClick={() => select(w.src)}
             className={`relative rounded-lg border p-3 text-left transition-all ${
-              currentSrc === w.src
-                ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30"
-                : "border-app-border bg-app-surface-alt hover:border-app-border-input"
+              currentSrc === w.src ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30" : "border-app-border bg-app-surface-alt hover:border-app-border-input"
             }`}
           >
             <div className="text-sm font-medium text-app-text truncate">{w.name}</div>
@@ -367,31 +356,25 @@ export function StepUnits() {
   return (
     <div>
       <h2 className="text-sm font-semibold text-app-text mb-1">Units</h2>
-      <p className="text-sm text-app-text-muted mb-4">
-        Choose between Imperial and Metric for speed, distance, and temperature.
-      </p>
+      <p className="text-sm text-app-text-muted mb-4">Choose between Imperial and Metric for speed, distance, and weight.</p>
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => selectUnit("imperial")}
           className={`rounded-lg border p-4 text-left transition-all ${
-            unitSystem === "imperial"
-              ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30"
-              : "border-app-border bg-app-surface-alt hover:border-app-border-input"
+            unitSystem === "imperial" ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30" : "border-app-border bg-app-surface-alt hover:border-app-border-input"
           }`}
         >
           <div className="text-sm font-medium text-app-text">Imperial</div>
-          <div className="text-xs text-app-text-muted mt-1">mph, ft, lb, °F</div>
+          <div className="text-xs text-app-text-muted mt-1">mph, ft, lb</div>
         </button>
         <button
           onClick={() => selectUnit("metric")}
           className={`rounded-lg border p-4 text-left transition-all ${
-            unitSystem === "metric"
-              ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30"
-              : "border-app-border bg-app-surface-alt hover:border-app-border-input"
+            unitSystem === "metric" ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30" : "border-app-border bg-app-surface-alt hover:border-app-border-input"
           }`}
         >
           <div className="text-sm font-medium text-app-text">Metric</div>
-          <div className="text-xs text-app-text-muted mt-1">km/h, m, kg, °C</div>
+          <div className="text-xs text-app-text-muted mt-1">km/h, m, kg</div>
         </button>
       </div>
       {saved && <p className="text-xs text-emerald-400 mt-3">Saved</p>}
@@ -409,23 +392,27 @@ export function StepSound() {
   return (
     <div>
       <h2 className="text-sm font-semibold text-app-text mb-1">Sound</h2>
-      <p className="text-sm text-app-text-muted mb-4">
-        Audio feedback for sector changes and lap events.
-      </p>
+      <p className="text-sm text-app-text-muted mb-4">Audio feedback for sector changes and lap events.</p>
 
       <div className="flex items-center gap-3 mb-4">
         <Label className="text-app-text-secondary text-sm">Sector blip</Label>
         <Button
           size="sm"
           variant={enabled ? "default" : "outline"}
-          onClick={() => { setEnabled(true); setSoundEnabled(true); }}
+          onClick={() => {
+            setEnabled(true);
+            setSoundEnabled(true);
+          }}
         >
           On
         </Button>
         <Button
           size="sm"
           variant={!enabled ? "default" : "outline"}
-          onClick={() => { setEnabled(false); setSoundEnabled(false); }}
+          onClick={() => {
+            setEnabled(false);
+            setSoundEnabled(false);
+          }}
         >
           Off
         </Button>
@@ -456,9 +443,7 @@ export function StepSound() {
           </div>
 
           <div className="mb-4">
-            <Label className="text-app-text-secondary text-xs mb-2 block">
-              Volume — {Math.round(volume * 100)}%
-            </Label>
+            <Label className="text-app-text-secondary text-xs mb-2 block">Volume — {Math.round(volume * 100)}%</Label>
             <input
               type="range"
               min="0"
@@ -516,9 +501,7 @@ export function OnboardingModal({ onClose }: { onClose?: () => void } = {}) {
         {/* Header — hidden on welcome */}
         {step > 0 && (
           <div className="px-4 md:px-6 pt-4 md:pt-6 pb-4 shrink-0">
-            <h1 className="text-base md:text-lg font-semibold text-app-text">
-              Configure your telemetry dashboard
-            </h1>
+            <h1 className="text-base md:text-lg font-semibold text-app-text">Configure your telemetry dashboard</h1>
             <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-1">
               {MODAL_STEPS.slice(1).map((s, idx) => {
                 const i = idx + 1;
@@ -530,13 +513,15 @@ export function OnboardingModal({ onClose }: { onClose?: () => void } = {}) {
                         i === step ? "text-app-accent" : i < step ? "text-app-text-secondary" : "text-app-text-muted/50"
                       }`}
                     >
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border transition-colors ${
-                        i === step
-                          ? "border-app-accent bg-app-accent/15 text-app-accent"
-                          : i < step
-                            ? "border-emerald-500 bg-emerald-500/15 text-emerald-400"
-                            : "border-app-border bg-app-surface-alt text-app-text-muted/50"
-                      }`}>
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border transition-colors ${
+                          i === step
+                            ? "border-app-accent bg-app-accent/15 text-app-accent"
+                            : i < step
+                              ? "border-emerald-500 bg-emerald-500/15 text-emerald-400"
+                              : "border-app-border bg-app-surface-alt text-app-text-muted/50"
+                        }`}
+                      >
                         {i < step ? (
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -547,9 +532,7 @@ export function OnboardingModal({ onClose }: { onClose?: () => void } = {}) {
                       </span>
                       {s.label}
                     </button>
-                    {idx < MODAL_STEPS.length - 2 && (
-                      <div className={`w-8 h-px ${i < step ? "bg-emerald-500/50" : "bg-app-border"}`} />
-                    )}
+                    {idx < MODAL_STEPS.length - 2 && <div className={`w-8 h-px ${i < step ? "bg-emerald-500/50" : "bg-app-border"}`} />}
                   </div>
                 );
               })}
@@ -591,13 +574,10 @@ export function OnboardingModal({ onClose }: { onClose?: () => void } = {}) {
 export function StepCommunity() {
   return (
     <div className="flex flex-col items-center justify-center text-center py-6">
-      <h2 className="text-2xl font-bold text-app-text mb-2 tracking-tight">
-        You're all set!
-      </h2>
+      <h2 className="text-2xl font-bold text-app-text mb-2 tracking-tight">You're all set!</h2>
       <p className="text-sm text-app-text-muted max-w-md leading-relaxed mt-2">
-        RaceIQ is an open-source project that depends on its community. Whether it's spreading the word,
-        submitting feature requests or bug reports, or contributing to the source code — every bit helps
-        make the app better for everyone.
+        RaceIQ is an open-source project that depends on its community. Whether it's spreading the word, submitting feature requests or bug reports, or contributing to the source code — every bit
+        helps make the app better for everyone.
       </p>
       <div className="flex items-center gap-4 mt-5">
         <a
@@ -657,9 +637,7 @@ export function StepConnection() {
   return (
     <div>
       <h2 className="text-sm font-semibold text-app-text mb-1">Connection</h2>
-      <p className="text-sm text-app-text-muted mb-4">
-        Set the UDP port, then start a session in your game to test the connection.
-      </p>
+      <p className="text-sm text-app-text-muted mb-4">Set the UDP port, then start a session in your game to test the connection.</p>
 
       <div className="flex items-end gap-2 mb-4">
         <div>
@@ -672,7 +650,10 @@ export function StepConnection() {
             min={1024}
             max={65535}
             value={udpPort}
-            onChange={(e) => { setUdpPort(e.target.value); setPortSaved(false); }}
+            onChange={(e) => {
+              setUdpPort(e.target.value);
+              setPortSaved(false);
+            }}
             onKeyDown={(e) => e.key === "Enter" && handleSavePort()}
             className="glass-input border bg-app-surface-alt border-app-border-input text-app-text font-mono mt-1 w-28"
           />
@@ -684,86 +665,80 @@ export function StepConnection() {
       {portError && <p className="text-red-400 text-xs mb-3">{portError}</p>}
 
       <details className="mb-4 group">
-        <summary className="text-xs text-app-accent cursor-pointer hover:text-app-accent/80 transition-colors">
-          How to enable Data Out in Forza Motorsport
-        </summary>
+        <summary className="text-xs text-app-accent cursor-pointer hover:text-app-accent/80 transition-colors">How to enable Data Out in Forza Motorsport</summary>
         <div className="mt-3 rounded-lg border border-app-border bg-app-surface-alt p-3">
           <ol className="space-y-1.5 text-xs text-app-text-muted list-decimal list-inside">
-            <li>Open <span className="text-app-text">Settings</span> in Forza Motorsport.</li>
-            <li>Go to <span className="text-app-text">Gameplay &amp; HUD</span>.</li>
-            <li>Scroll to <span className="text-app-text">UDP Race Telemetry</span>.</li>
-            <li>Set <span className="text-app-text">Data Out</span> to <span className="text-app-accent font-medium">On</span>.</li>
             <li>
-              Set <span className="text-app-text">IP Address</span> to your PC's IP (or{" "}
-              <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">127.0.0.1</code> if same PC).
+              Open <span className="text-app-text">Settings</span> in Forza Motorsport.
             </li>
             <li>
-              Set <span className="text-app-text">Port</span> to{" "}
-              <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">{udpPort || "5301"}</code>.
+              Go to <span className="text-app-text">Gameplay &amp; HUD</span>.
             </li>
-            <li>Set <span className="text-app-text">Packet Format</span> to <span className="text-app-accent font-medium">Car Dash</span>.</li>
+            <li>
+              Scroll to <span className="text-app-text">UDP Race Telemetry</span>.
+            </li>
+            <li>
+              Set <span className="text-app-text">Data Out</span> to <span className="text-app-accent font-medium">On</span>.
+            </li>
+            <li>
+              Set <span className="text-app-text">IP Address</span> to your PC's IP (or <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">127.0.0.1</code> if same PC).
+            </li>
+            <li>
+              Set <span className="text-app-text">Port</span> to <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">{udpPort || "5301"}</code>.
+            </li>
+            <li>
+              Set <span className="text-app-text">Packet Format</span> to <span className="text-app-accent font-medium">Car Dash</span>.
+            </li>
           </ol>
-          <p className="mt-2 text-[10px] text-app-text-muted/70">
-            Telemetry only sends during a race session (Practice, Qualifying, or Race). No data from menus, replays, or spectating.
-          </p>
+          <p className="mt-2 text-[10px] text-app-text-muted/70">Telemetry only sends during a race session (Practice, Qualifying, or Race). No data from menus, replays, or spectating.</p>
         </div>
       </details>
 
       <details className="mb-4 group">
-        <summary className="text-xs text-app-accent cursor-pointer hover:text-app-accent/80 transition-colors">
-          How to enable UDP Telemetry in F1 2025
-        </summary>
+        <summary className="text-xs text-app-accent cursor-pointer hover:text-app-accent/80 transition-colors">How to enable UDP Telemetry in F1 2025</summary>
         <div className="mt-3 rounded-lg border border-app-border bg-app-surface-alt p-3">
           <ol className="space-y-1.5 text-xs text-app-text-muted list-decimal list-inside">
-            <li>Open <span className="text-app-text">Settings</span> in F1 2025.</li>
-            <li>Go to <span className="text-app-text">Telemetry Settings</span>.</li>
-            <li>Set <span className="text-app-text">UDP Telemetry</span> to <span className="text-app-accent font-medium">On</span>.</li>
-            <li>Set <span className="text-app-text">UDP Broadcast Mode</span> to <span className="text-app-accent font-medium">Off</span>.</li>
             <li>
-              Set <span className="text-app-text">IP Address</span> to your PC's IP (or{" "}
-              <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">127.0.0.1</code> if same PC).
+              Open <span className="text-app-text">Settings</span> in F1 2025.
             </li>
             <li>
-              Set <span className="text-app-text">Port</span> to{" "}
-              <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">{udpPort || "5300"}</code>.
+              Go to <span className="text-app-text">Telemetry Settings</span>.
             </li>
-            <li>Set <span className="text-app-text">UDP Send Rate</span> to <span className="text-app-accent font-medium">60 Hz</span>.</li>
-            <li>Set <span className="text-app-text">UDP Format</span> to <span className="text-app-accent font-medium">2025</span>.</li>
+            <li>
+              Set <span className="text-app-text">UDP Telemetry</span> to <span className="text-app-accent font-medium">On</span>.
+            </li>
+            <li>
+              Set <span className="text-app-text">UDP Broadcast Mode</span> to <span className="text-app-accent font-medium">Off</span>.
+            </li>
+            <li>
+              Set <span className="text-app-text">IP Address</span> to your PC's IP (or <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">127.0.0.1</code> if same PC).
+            </li>
+            <li>
+              Set <span className="text-app-text">Port</span> to <code className="text-app-accent bg-app-surface rounded px-1 py-0.5 font-mono">{udpPort || "5300"}</code>.
+            </li>
+            <li>
+              Set <span className="text-app-text">UDP Send Rate</span> to <span className="text-app-accent font-medium">60 Hz</span>.
+            </li>
+            <li>
+              Set <span className="text-app-text">UDP Format</span> to <span className="text-app-accent font-medium">2025</span>.
+            </li>
           </ol>
-          <p className="mt-2 text-[10px] text-app-text-muted/70">
-            Same UDP port works for both games — telemetry is auto-detected.
-          </p>
+          <p className="mt-2 text-[10px] text-app-text-muted/70">Same UDP port works for both games — telemetry is auto-detected.</p>
         </div>
       </details>
 
-      <div className={`rounded-lg border p-4 transition-colors ${
-        receiving
-          ? "border-emerald-500/50 bg-emerald-500/5"
-          : "border-app-border bg-app-surface-alt"
-      }`}>
+      <div className={`rounded-lg border p-4 transition-colors ${receiving ? "border-emerald-500/50 bg-emerald-500/5" : "border-app-border bg-app-surface-alt"}`}>
         <div className="flex items-center gap-3">
-          <div className={`relative w-3 h-3 rounded-full ${
-            receiving ? "bg-emerald-400" : "bg-app-text-muted/30"
-          }`}>
-            {receiving && (
-              <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-40" />
-            )}
-            {!receiving && (
-              <span className="absolute inset-0 rounded-full bg-app-text-muted/30 animate-ping opacity-40" />
-            )}
+          <div className={`relative w-3 h-3 rounded-full ${receiving ? "bg-emerald-400" : "bg-app-text-muted/30"}`}>
+            {receiving && <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-40" />}
+            {!receiving && <span className="absolute inset-0 rounded-full bg-app-text-muted/30 animate-ping opacity-40" />}
           </div>
           <div>
-            <p className={`text-sm font-medium ${
-              receiving ? "text-emerald-400" : "text-app-text-muted"
-            }`}>
-              {receiving
-                ? packetsPerSec > 0 ? "Receiving telemetry!" : "Connected — waiting for race session"
-                : "Waiting for game data..."}
+            <p className={`text-sm font-medium ${receiving ? "text-emerald-400" : "text-app-text-muted"}`}>
+              {receiving ? (packetsPerSec > 0 ? "Receiving telemetry!" : "Connected — waiting for race session") : "Waiting for game data..."}
             </p>
             <p className="text-xs text-app-text-muted mt-0.5">
-              {receiving
-                ? packetsPerSec > 0 ? `${packetsPerSec} packets/sec` : `${udpPps} UDP pkt/s — start a race to get telemetry`
-                : "Start a session in your game. See setup instructions above."}
+              {receiving ? (packetsPerSec > 0 ? `${packetsPerSec} packets/sec` : `${udpPps} UDP pkt/s — start a race to get telemetry`) : "Start a session in your game. See setup instructions above."}
             </p>
           </div>
         </div>
