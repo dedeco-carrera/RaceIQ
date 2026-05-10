@@ -42,3 +42,4 @@ playwright/screenshots/
 # Dev dump recordings — track gzipped fixtures only
 test/artifacts/sessions/*.bin
 .claude/scheduled_tasks.lock
+/.crew
