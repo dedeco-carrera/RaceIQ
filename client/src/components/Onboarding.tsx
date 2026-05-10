@@ -1,17 +1,17 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { client } from "../lib/rpc";
-import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useTelemetryStore } from "../stores/telemetry";
-import { useSettings, useSaveSettings } from "../hooks/queries";
 import type { TelemetryPacket } from "@shared/types";
-import { getWheelStyle, getSoundEnabled, setSoundEnabled, getSoundVolume, setSoundVolume, getSoundType, setSoundType, SOUND_PRESETS } from "./Settings";
-import { playBlip, preloadSound } from "./SectorTimes";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SiDiscord, SiGithub } from "react-icons/si";
-import { CarWireframe } from "./CarWireframe";
 import { DEMO_CAR } from "../data/car-models";
+import { useSaveSettings, useSettings } from "../hooks/queries";
+import { client } from "../lib/rpc";
+import { useTelemetryStore } from "../stores/telemetry";
+import { CarWireframe } from "./CarWireframe";
+import { playBlip, preloadSound } from "./SectorTimes";
+import { SOUND_PRESETS, getSoundEnabled, getSoundType, getSoundVolume, getWheelStyle, setSoundEnabled, setSoundType, setSoundVolume } from "./Settings";
 
 const WHEEL_STYLE_KEY = "forza-wheel-style";
 
@@ -38,7 +38,7 @@ function WelcomeViewport({ telemetry }: { telemetry: TelemetryPacket[] }) {
       return null;
     },
     enabled: !!trackOrdinal,
-    staleTime: Infinity,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 
   // Fetch track boundaries
@@ -53,7 +53,7 @@ function WelcomeViewport({ telemetry }: { telemetry: TelemetryPacket[] }) {
       return res.json();
     },
     enabled: !!trackOrdinal,
-    staleTime: Infinity,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 
   // Expose frame control for Playwright recording
@@ -81,9 +81,9 @@ function WelcomeViewport({ telemetry }: { telemetry: TelemetryPacket[] }) {
     };
     (window as unknown as Record<string, unknown>).__totalFrames = telemetry.length;
     return () => {
-      delete (window as unknown as Record<string, unknown>).__setFrame;
-      delete (window as unknown as Record<string, unknown>).__pauseAnimation;
-      delete (window as unknown as Record<string, unknown>).__totalFrames;
+      (window as unknown as Record<string, unknown>).__setFrame = undefined;
+      (window as unknown as Record<string, unknown>).__pauseAnimation = undefined;
+      (window as unknown as Record<string, unknown>).__totalFrames = undefined;
     };
   }, [telemetry.length]);
 
@@ -164,10 +164,11 @@ export function StepWelcome() {
       }
       return packets;
     },
-    staleTime: Infinity,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 
-  const hasTelemetry = !!demoTelemetry?.length;
+  const telemetry = demoTelemetry ?? [];
+  const hasTelemetry = telemetry.length > 0;
 
   return (
     <div className="flex flex-col items-center justify-center text-center py-6">
@@ -175,12 +176,12 @@ export function StepWelcome() {
         <div className="mb-5 w-full h-48 rounded-lg bg-app-surface-alt animate-pulse" />
       ) : hasTelemetry ? (
         <div className="mb-5 w-full">
-          <WelcomeViewport telemetry={demoTelemetry!} />
+          <WelcomeViewport telemetry={telemetry} />
         </div>
       ) : (
         <div className="mb-5 relative w-64 h-20">
           <div className="absolute inset-0 bg-app-accent/5 rounded-lg blur-xl" />
-          <svg viewBox="0 0 260 80" fill="none" className="relative w-full h-full">
+          <svg viewBox="0 0 260 80" fill="none" className="relative w-full h-full" aria-hidden="true">
             {[20, 40, 60].map((y) => (
               <line key={y} x1="0" y1={y} x2="260" y2={y} stroke="currentColor" strokeWidth="0.5" className="text-app-border" opacity="0.3" />
             ))}
@@ -316,6 +317,7 @@ export function StepWheel() {
       <div className="grid grid-cols-3 gap-3">
         {wheels.map((w) => (
           <button
+            type="button"
             key={w.id}
             onClick={() => select(w.src)}
             className={`relative rounded-lg border p-3 text-left transition-all ${
@@ -339,18 +341,24 @@ export function StepUnits() {
   const { displaySettings } = useSettings();
   const saveSettings = useSaveSettings();
   const [unitSystem, setUnitSystem] = useState<"metric" | "imperial">(displaySettings.unit);
-  const [saved, setSaved] = useState(false);
+  const [temperatureUnit, setTemperatureUnit] = useState<"C" | "F">(displaySettings.temperatureUnit);
 
-  async function selectUnit(unit: "metric" | "imperial") {
-    setUnitSystem(unit);
-    setSaved(false);
+  async function saveUnitSettings(next: { unit?: "metric" | "imperial"; temperatureUnit?: "C" | "F" }) {
     try {
-      await saveSettings.mutateAsync({ unit });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      await saveSettings.mutateAsync({ unit: next.unit ?? unitSystem, temperatureUnit: next.temperatureUnit ?? temperatureUnit });
     } catch {
       // silent
     }
+  }
+
+  async function selectUnit(unit: "metric" | "imperial") {
+    setUnitSystem(unit);
+    await saveUnitSettings({ unit });
+  }
+
+  async function selectTemperatureUnit(next: "C" | "F") {
+    setTemperatureUnit(next);
+    await saveUnitSettings({ temperatureUnit: next });
   }
 
   return (
@@ -359,6 +367,7 @@ export function StepUnits() {
       <p className="text-sm text-app-text-muted mb-4">Choose between Imperial and Metric for speed, distance, and weight.</p>
       <div className="grid grid-cols-2 gap-3">
         <button
+          type="button"
           onClick={() => selectUnit("imperial")}
           className={`rounded-lg border p-4 text-left transition-all ${
             unitSystem === "imperial" ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30" : "border-app-border bg-app-surface-alt hover:border-app-border-input"
@@ -368,6 +377,7 @@ export function StepUnits() {
           <div className="text-xs text-app-text-muted mt-1">mph, ft, lb</div>
         </button>
         <button
+          type="button"
           onClick={() => selectUnit("metric")}
           className={`rounded-lg border p-4 text-left transition-all ${
             unitSystem === "metric" ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30" : "border-app-border bg-app-surface-alt hover:border-app-border-input"
@@ -377,7 +387,32 @@ export function StepUnits() {
           <div className="text-xs text-app-text-muted mt-1">km/h, m, kg</div>
         </button>
       </div>
-      {saved && <p className="text-xs text-emerald-400 mt-3">Saved</p>}
+
+      <div className="mt-5 pt-5 border-t border-app-border">
+        <h3 className="text-sm font-semibold text-app-text mb-1">Temperature</h3>
+        <p className="text-xs text-app-text-muted mb-3">Set tire and fluid temperature display unit.</p>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => selectTemperatureUnit("F")}
+            className={`rounded-lg border px-4 py-2 text-sm transition-all ${
+              temperatureUnit === "F" ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30" : "border-app-border bg-app-surface-alt hover:border-app-border-input"
+            }`}
+          >
+            °F
+          </button>
+          <button
+            type="button"
+            onClick={() => selectTemperatureUnit("C")}
+            className={`rounded-lg border px-4 py-2 text-sm transition-all ${
+              temperatureUnit === "C" ? "border-app-accent bg-app-accent/10 ring-1 ring-app-accent/30" : "border-app-border bg-app-surface-alt hover:border-app-border-input"
+            }`}
+          >
+            °C
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -450,7 +485,7 @@ export function StepSound() {
               max="100"
               value={Math.round(volume * 100)}
               onChange={(e) => {
-                const v = parseInt(e.target.value, 10) / 100;
+                const v = Number.parseInt(e.target.value, 10) / 100;
                 setVolume(v);
                 setSoundVolume(v);
               }}
@@ -508,6 +543,7 @@ export function OnboardingModal({ onClose }: { onClose?: () => void } = {}) {
                 return (
                   <div key={s.label} className="flex items-center gap-2 shrink-0">
                     <button
+                      type="button"
                       onClick={() => setStep(i)}
                       className={`flex items-center gap-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                         i === step ? "text-app-accent" : i < step ? "text-app-text-secondary" : "text-app-text-muted/50"
@@ -523,7 +559,7 @@ export function OnboardingModal({ onClose }: { onClose?: () => void } = {}) {
                         }`}
                       >
                         {i < step ? (
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
                         ) : (
@@ -608,8 +644,11 @@ export function StepCommunity() {
 export function StepConnection() {
   const { displaySettings } = useSettings();
   const saveSettings = useSaveSettings();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [udpPort, setUdpPort] = useState(() => String((displaySettings as any).udpPort ?? 5301));
+  const [udpPort, setUdpPort] = useState(() => {
+    const settings = displaySettings as Record<string, unknown>;
+    const udpPortValue = settings.udpPort;
+    return typeof udpPortValue === "number" ? String(udpPortValue) : "5301";
+  });
   const [portSaved, setPortSaved] = useState(false);
   const [portError, setPortError] = useState("");
   const packetsPerSec = useTelemetryStore((s) => s.packetsPerSec);
@@ -618,15 +657,14 @@ export function StepConnection() {
   const receiving = udpPps > 0 || packetsPerSec > 0 || lastUdpAt > 0;
 
   async function handleSavePort() {
-    const port = parseInt(udpPort, 10);
-    if (isNaN(port) || port < 1024 || port > 65535) {
+    const port = Number.parseInt(udpPort, 10);
+    if (Number.isNaN(port) || port < 1024 || port > 65535) {
       setPortError("Port must be between 1024-65535");
       return;
     }
     setPortError("");
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await saveSettings.mutateAsync({ udpPort: port } as any);
+      await saveSettings.mutateAsync({ udpPort: port });
       setPortSaved(true);
       setTimeout(() => setPortSaved(false), 2000);
     } catch {
