@@ -9,6 +9,7 @@ import { useSettings } from "../../hooks/queries";
 import { useUiStore } from "../../stores/ui";
 import { Button } from "../ui/button";
 import { AnalysisDisplay, type AnalysisData } from "../ai/analysis-display";
+import { isAiConfigured } from "../../lib/is-ai-configured";
 
 type ParsedAnalysis = Partial<AnalysisData>;
 
@@ -494,7 +495,7 @@ function AnalysisModal({
 export const CompareAiPanel = forwardRef<CompareAiPanelHandle, CompareAiPanelProps>(function CompareAiPanel({ lapA, lapB, panelOpen = false, segments: trackSegments, onJumpToFrac }, ref) {
   const { displaySettings } = useSettings();
   const openSettings = useUiStore((s) => s.openSettings);
-  const aiConfigured = !!(displaySettings.geminiApiKeySet || displaySettings.openaiApiKeySet);
+  const aiConfigured = isAiConfigured(displaySettings);
 
   const [hasA, setHasA] = useState(false);
   const [hasB, setHasB] = useState(false);
