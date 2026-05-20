@@ -50,6 +50,7 @@ import { buildInputsComparePrompt, InputsCompareSchema } from "../ai/inputs-comp
 import { lapAnalystAgent, lapChatAgent, compareEngineerAgent, compareChatAgent } from "../ai/agents";
 import { buildGoogleProviderOptions, buildGoogleThinkingProviderOptions } from "../ai/google-provider-options";
 import { toClientAiError } from "../ai/provider-error";
+import { extractJson } from "../ai/extract-json";
 
 /** Parse a stored carSetup JSON blob, returning null on any error. */
 function safeParseJson(raw: string): Record<string, unknown> | null {
@@ -377,11 +378,12 @@ export const lapRoutes = new Hono()
               google: buildGoogleProviderOptions(modelLabel, getAnalystJsonSchema() as Record<string, unknown>, settings.aiThinkingBudget) as never,
             },
           });
-          const text = typeof result.text === "string" ? result.text : "";
+          const rawText = typeof result.text === "string" ? result.text : "";
+          let text = rawText;
           const durationMs = Date.now() - startedAt;
           let validJson = false;
           try {
-            JSON.parse(text);
+            text = extractJson(rawText);
             validJson = true;
           } catch (parseErr) {
             const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);

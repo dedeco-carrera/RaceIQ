@@ -2,6 +2,7 @@
  * AI provider abstraction — supports Claude CLI and Gemini API.
  */
 
+import { extractJson } from "./extract-json";
 export interface AiResult {
   analysis: string;
   usage: {
@@ -309,14 +310,6 @@ export async function runGemini(
   };
 }
 
-/** Extract and validate JSON from an AI response (strips markdown fences if present). */
-function extractJson(text: string): string {
-  let jsonStr = text.trim();
-  const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (fenceMatch) jsonStr = fenceMatch[1].trim();
-  JSON.parse(jsonStr); // validate — throws if invalid
-  return jsonStr;
-}
 
 /** Run analysis via OpenAI API. */
 export async function runOpenAi(
