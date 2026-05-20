@@ -58,7 +58,7 @@ export function ChatsPage() {
     try {
       const res = await fetch(`/api/chats?gameId=${encodeURIComponent(gameId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { chats: ChatRow[] };
+      const data = (await res.json()) as { chats: ChatRow[] };
       setRows(data.chats ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load chats");
@@ -77,33 +77,38 @@ export function ChatsPage() {
     try {
       await fetch(`/api/chats/${encodeURIComponent(threadId)}`, { method: "DELETE" });
       setRows((prev) => prev.filter((r) => r.threadId !== threadId));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  const handleOpen = useCallback((row: ChatRow) => {
-    if (!gameId) return;
-    const game = getGame(gameId);
-    const prefix = `/${game.routePrefix}`;
-    if (row.type === "analyse" && row.laps[0]) {
-      const lap = row.laps[0];
-      navigate({
-        to: `${prefix}/analyse` as never,
-        search: { lap: lap.id, ai: 1 } as never,
-      });
-    } else if (row.type === "compare" && row.laps.length === 2) {
-      const [a, b] = row.laps;
-      navigate({
-        to: `${prefix}/compare` as never,
-        search: {
-          lapA: a.id,
-          lapB: b.id,
-          carA: undefined,
-          carB: undefined,
-          ai: 1,
-        } as never,
-      });
-    }
-  }, [gameId, navigate]);
+  const handleOpen = useCallback(
+    (row: ChatRow) => {
+      if (!gameId) return;
+      const game = getGame(gameId);
+      const prefix = `/${game.routePrefix}`;
+      if (row.type === "analyse" && row.laps[0]) {
+        const lap = row.laps[0];
+        navigate({
+          to: `${prefix}/analyse` as never,
+          search: { lap: lap.id, ai: 1 } as never,
+        });
+      } else if (row.type === "compare" && row.laps.length === 2) {
+        const [a, b] = row.laps;
+        navigate({
+          to: `${prefix}/compare` as never,
+          search: {
+            lapA: a.id,
+            lapB: b.id,
+            carA: undefined,
+            carB: undefined,
+            ai: 1,
+          } as never,
+        });
+      }
+    },
+    [gameId, navigate],
+  );
 
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-hidden">
@@ -139,16 +144,13 @@ export function ChatsPage() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr
-                  key={row.threadId}
-                  className="border-b border-app-border/40 hover:bg-app-surface-alt/40 transition-colors"
-                >
+                <tr key={row.threadId} className="border-b border-app-border/40 hover:bg-app-surface-alt/40 transition-colors">
                   <td className="px-3 py-2">
-                    <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                      row.type === "compare"
-                        ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30"
-                        : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                    }`}>
+                    <span
+                      className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                        row.type === "compare" ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30" : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                      }`}
+                    >
                       {row.type}
                     </span>
                   </td>
@@ -156,9 +158,7 @@ export function ChatsPage() {
                   <td className="px-3 py-2 text-app-text-secondary">
                     {row.laps.map((l, i) => (
                       <div key={i} className="flex items-center gap-1.5">
-                        {row.type === "compare" && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-orange-500" : "bg-blue-500"}`} />
-                        )}
+                        {row.type === "compare" && <span className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-orange-500" : "bg-blue-500"}`} />}
                         <span className="truncate max-w-[180px]">{l.carName}</span>
                       </div>
                     ))}

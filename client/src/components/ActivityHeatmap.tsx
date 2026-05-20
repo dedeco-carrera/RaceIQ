@@ -34,13 +34,7 @@ function fmtDuration(sec: number): string {
   return `${s}s`;
 }
 
-const LEVEL_COLORS = [
-  "var(--color-app-surface-alt, #1a1d26)",
-  "rgba(139, 92, 246, 0.25)",
-  "rgba(139, 92, 246, 0.5)",
-  "rgba(139, 92, 246, 0.75)",
-  "rgba(139, 92, 246, 1)",
-];
+const LEVEL_COLORS = ["var(--color-app-surface-alt, #1a1d26)", "rgba(139, 92, 246, 0.25)", "rgba(139, 92, 246, 0.5)", "rgba(139, 92, 246, 0.75)", "rgba(139, 92, 246, 1)"];
 
 export function ActivityHeatmap({ laps }: { laps: LapMeta[] }) {
   const [hover, setHover] = useState<{ date: string; seconds: number; x: number; y: number } | null>(null);
@@ -124,9 +118,7 @@ export function ActivityHeatmap({ laps }: { laps: LapMeta[] }) {
   return (
     <div>
       <div className="flex items-baseline justify-between mb-2">
-        <h2 className="text-xs font-semibold text-app-text/90-muted uppercase tracking-wider">
-          Activity — Last 12 Months
-        </h2>
+        <h2 className="text-xs font-semibold text-app-text/90-muted uppercase tracking-wider">Activity — Last 12 Months</h2>
         <div className="text-[11px] text-app-text/90-dim">
           {fmtDuration(totalSeconds)} · {totalDays} active days · longest streak {longestStreak} day{longestStreak === 1 ? "" : "s"} · longest day {fmtDuration(bestDaySeconds)}
         </div>
@@ -135,17 +127,15 @@ export function ActivityHeatmap({ laps }: { laps: LapMeta[] }) {
         <div className="flex gap-2 w-max mx-auto">
           <div className="flex flex-col justify-between py-[14px] pr-1 text-[9px] text-app-text/90-dim leading-none select-none">
             {DAY_LABELS.map((l, i) => (
-              <div key={i} style={{ height: CELL }}>{l}</div>
+              <div key={i} style={{ height: CELL }}>
+                {l}
+              </div>
             ))}
           </div>
           <div>
             <div className="relative" style={{ height: 14, width }}>
               {monthMarkers.map((m, i) => (
-                <div
-                  key={i}
-                  className="absolute text-[9px] text-app-text/90-dim uppercase tracking-wider"
-                  style={{ left: m.week * (CELL + GAP) }}
-                >
+                <div key={i} className="absolute text-[9px] text-app-text/90-dim uppercase tracking-wider" style={{ left: m.week * (CELL + GAP) }}>
                   {m.label}
                 </div>
               ))}
@@ -157,11 +147,7 @@ export function ActivityHeatmap({ laps }: { laps: LapMeta[] }) {
                   const lvl = intensity(seconds, max);
                   const isToday = key === todayKey;
                   const isBestDay = key === bestDayKey;
-                  const stroke = isBestDay
-                    ? "rgba(34, 211, 238, 1)"
-                    : isToday
-                      ? "rgba(139, 92, 246, 0.9)"
-                      : "rgba(255,255,255,0.04)";
+                  const stroke = isBestDay ? "rgba(34, 211, 238, 1)" : isToday ? "rgba(139, 92, 246, 0.9)" : "rgba(255,255,255,0.04)";
                   const strokeWidth = isBestDay ? 1.5 : isToday ? 1 : 0.5;
                   return (
                     <rect
@@ -187,7 +173,7 @@ export function ActivityHeatmap({ laps }: { laps: LapMeta[] }) {
                       onMouseLeave={() => setHover(null)}
                     />
                   );
-                })
+                }),
               )}
             </svg>
           </div>
@@ -208,11 +194,7 @@ export function ActivityHeatmap({ laps }: { laps: LapMeta[] }) {
           <div className="flex items-center gap-1.5">
             <span>Less</span>
             {LEVEL_COLORS.map((c, i) => (
-              <span
-                key={i}
-                className="inline-block rounded-sm"
-                style={{ width: CELL, height: CELL, background: c, border: "0.5px solid rgba(255,255,255,0.04)" }}
-              />
+              <span key={i} className="inline-block rounded-sm" style={{ width: CELL, height: CELL, background: c, border: "0.5px solid rgba(255,255,255,0.04)" }} />
             ))}
             <span>More</span>
           </div>

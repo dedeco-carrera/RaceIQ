@@ -39,11 +39,7 @@ export function InfoTooltip({
   width?: "max" | "xs" | "sm" | "md";
 }) {
   const posClass = position === "top" ? "bottom-full mb-2" : "top-full mt-2";
-  const widthClass =
-    width === "max" ? "w-max max-w-[240px]" :
-    width === "xs"  ? "w-[180px]" :
-    width === "sm"  ? "w-[220px]" :
-                      "w-[280px]";
+  const widthClass = width === "max" ? "w-max max-w-[240px]" : width === "xs" ? "w-[180px]" : width === "sm" ? "w-[220px]" : "w-[280px]";
   const [tapOpen, setTapOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -63,7 +59,10 @@ export function InfoTooltip({
     <span ref={ref} className="group/tip relative inline-flex items-center shrink-0">
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); setTapOpen((o) => !o); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setTapOpen((o) => !o);
+        }}
         aria-label="More info"
         className="inline-flex items-center p-0 m-0 bg-transparent border-0 cursor-help"
       >

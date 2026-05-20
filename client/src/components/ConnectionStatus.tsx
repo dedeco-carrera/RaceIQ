@@ -31,9 +31,7 @@ export function ConnectionStatus({ connected, packetsPerSec, forzaReceiving }: P
         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${DOT_CLASS[view.dotColor]}`} />
         <span className="text-sm font-medium text-app-text whitespace-nowrap">{view.gameText}</span>
       </div>
-      <span className="text-sm text-app-text-muted font-mono tabular-nums whitespace-nowrap shrink-0">
-        {forzaReceiving ? `${packetsPerSec} pkt/s · ${displaySettings.wsRefreshRate ?? 60}Hz` : ""}
-      </span>
+      <span className="text-sm text-app-text-muted font-mono tabular-nums whitespace-nowrap shrink-0">{forzaReceiving ? `${packetsPerSec} pkt/s · ${displaySettings.wsRefreshRate ?? 60}Hz` : ""}</span>
     </div>
   );
 }

@@ -49,9 +49,7 @@ export function SearchMultiSelect<K extends string | number>({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const filtered = options.filter((o) =>
-    (o.search ?? o.label).toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = options.filter((o) => (o.search ?? o.label).toLowerCase().includes(search.toLowerCase()));
 
   const handleSelect = (key: K) => {
     onSelect(key);
@@ -65,7 +63,10 @@ export function SearchMultiSelect<K extends string | number>({
     <div ref={ref} className={`relative ${className}`}>
       <div className="flex items-center gap-1">
         <button
-          onClick={() => { setOpen((o) => !o); setSearch(""); }}
+          onClick={() => {
+            setOpen((o) => !o);
+            setSearch("");
+          }}
           className="text-sm md:text-app-unit px-3 py-2 md:px-2 md:py-0.5 rounded border border-app-border-input text-app-text-secondary hover:text-app-text flex items-center gap-1.5"
         >
           {buttonLabel}
@@ -74,16 +75,15 @@ export function SearchMultiSelect<K extends string | number>({
           </svg>
         </button>
         {onClear && (
-          <button
-            onClick={onClear}
-            className="text-sm md:text-app-unit text-app-text-dim hover:text-app-text px-2 py-2 md:px-1 md:py-0.5"
-          >
+          <button onClick={onClear} className="text-sm md:text-app-unit text-app-text-dim hover:text-app-text px-2 py-2 md:px-1 md:py-0.5">
             ✕
           </button>
         )}
       </div>
       {open && (
-        <div className={`absolute ${menuAlign === "right" ? "right-0 md:right-auto md:left-0" : "left-0"} top-full mt-1 ${menuWidthClass} max-w-[calc(100vw-2rem)] bg-app-surface-alt border border-app-border-input rounded-lg shadow-lg z-50`}>
+        <div
+          className={`absolute ${menuAlign === "right" ? "right-0 md:right-auto md:left-0" : "left-0"} top-full mt-1 ${menuWidthClass} max-w-[calc(100vw-2rem)] bg-app-surface-alt border border-app-border-input rounded-lg shadow-lg z-50`}
+        >
           <div className="p-1.5 border-b border-app-border-input">
             <input
               autoFocus
@@ -116,9 +116,7 @@ export function SearchMultiSelect<K extends string | number>({
                 </button>
               );
             })}
-            {filtered.length === 0 && (
-              <div className="px-3 py-2 text-sm text-app-text-muted">No results</div>
-            )}
+            {filtered.length === 0 && <div className="px-3 py-2 text-sm text-app-text-muted">No results</div>}
           </div>
         </div>
       )}

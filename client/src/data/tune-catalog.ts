@@ -37,15 +37,7 @@ export interface CatalogTune {
 
 export const CATALOG_CARS: CatalogCar[] = carsJson as CatalogCar[];
 
-export const TUNE_CATALOG: CatalogTune[] = [
-  balancedCircuit,
-  aggressiveCircuit,
-  wetWeather,
-  topSpeed,
-  stableBeginner,
-  nordschleife,
-  spa,
-] as CatalogTune[];
+export const TUNE_CATALOG: CatalogTune[] = [balancedCircuit, aggressiveCircuit, wetWeather, topSpeed, stableBeginner, nordschleife, spa] as CatalogTune[];
 
 export function getTunesByCar(carOrdinal: number): CatalogTune[] {
   return TUNE_CATALOG.filter((t) => t.carOrdinal === carOrdinal);

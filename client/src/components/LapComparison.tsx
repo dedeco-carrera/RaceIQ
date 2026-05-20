@@ -25,9 +25,7 @@ interface TrackGroup {
 }
 
 function useIsPhoneViewport() {
-  const [isPhone, setIsPhone] = useState(() =>
-    typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) <= 768,
-  );
+  const [isPhone, setIsPhone] = useState(() => typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) <= 768);
   useEffect(() => {
     const check = () => setIsPhone(Math.min(window.innerWidth, window.innerHeight) <= 768);
     window.addEventListener("resize", check);
@@ -83,12 +81,20 @@ function LapComparisonInner() {
   const mapRedrawRef = useRef<(() => void) | null>(null);
   const aiPanelRef = useRef<CompareAiPanelHandle | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem("compare-ai-panel-open") === "1"; } catch { return false; }
+    try {
+      return localStorage.getItem("compare-ai-panel-open") === "1";
+    } catch {
+      return false;
+    }
   });
   const toggleAiPanel = useCallback(() => {
     setAiPanelOpen((v) => {
       const next = !v;
-      try { localStorage.setItem("compare-ai-panel-open", next ? "1" : "0"); } catch { /* ignore */ }
+      try {
+        localStorage.setItem("compare-ai-panel-open", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
       return next;
     });
   }, []);
@@ -97,13 +103,16 @@ function LapComparisonInner() {
     // Directly redraw the map canvas without React re-render
     mapRedrawRef.current?.();
   }, []);
-  const handleJumpToFrac = useCallback((frac: number) => {
-    const distances = comparison?.traces?.distance;
-    if (!distances || distances.length === 0) return;
-    const idx = Math.max(0, Math.min(distances.length - 1, Math.floor(frac * distances.length)));
-    hoveredDistanceRef.current = distances[idx];
-    mapRedrawRef.current?.();
-  }, [comparison]);
+  const handleJumpToFrac = useCallback(
+    (frac: number) => {
+      const distances = comparison?.traces?.distance;
+      if (!distances || distances.length === 0) return;
+      const idx = Math.max(0, Math.min(distances.length - 1, Math.floor(frac * distances.length)));
+      hoveredDistanceRef.current = distances[idx];
+      mapRedrawRef.current?.();
+    },
+    [comparison],
+  );
 
   // Set cursor from URL param once comparison data loads
   const appliedInitialCursor = useRef(false);
@@ -121,14 +130,15 @@ function LapComparisonInner() {
   // Sync selections to URL
   useEffect(() => {
     navigate({
-      search: (prev: Record<string, unknown>) => ({
-        ...prev,
-        track: selectedTrack ?? undefined,
-        carA: carAOrd ?? undefined,
-        carB: carBOrd ?? undefined,
-        lapA: lapAId ?? undefined,
-        lapB: lapBId ?? undefined,
-      }) as never,
+      search: (prev: Record<string, unknown>) =>
+        ({
+          ...prev,
+          track: selectedTrack ?? undefined,
+          carA: carAOrd ?? undefined,
+          carB: carBOrd ?? undefined,
+          lapA: lapAId ?? undefined,
+          lapB: lapBId ?? undefined,
+        }) as never,
       replace: true,
       resetScroll: false,
     });
@@ -150,7 +160,9 @@ function LapComparisonInner() {
       const groups: TrackGroup[] = [];
       for (const [ordinal, trackLaps] of byTrack) {
         let name = `Track ${ordinal}`;
-        try { name = await client.api["track-name"][":ordinal"].$get({ param: { ordinal: String(ordinal) }, query: { gameId: gameId! } }).then((r) => r.ok ? r.text() : name); } catch {}
+        try {
+          name = await client.api["track-name"][":ordinal"].$get({ param: { ordinal: String(ordinal) }, query: { gameId: gameId! } }).then((r) => (r.ok ? r.text() : name));
+        } catch {}
         groups.push({ trackOrdinal: ordinal, trackName: name, laps: trackLaps });
       }
       groups.sort((a, b) => a.trackName.localeCompare(b.trackName));
@@ -159,8 +171,10 @@ function LapComparisonInner() {
       const names = new Map<number, string>();
       await Promise.all(
         Array.from(carOrds).map(async (ord) => {
-          try { names.set(ord, await client.api["car-name"][":ordinal"].$get({ param: { ordinal: String(ord) }, query: { gameId: gameId! } }).then((r) => r.ok ? r.text() : "")); } catch {}
-        })
+          try {
+            names.set(ord, await client.api["car-name"][":ordinal"].$get({ param: { ordinal: String(ord) }, query: { gameId: gameId! } }).then((r) => (r.ok ? r.text() : "")));
+          } catch {}
+        }),
       );
 
       if (!cancelled) {
@@ -169,7 +183,9 @@ function LapComparisonInner() {
       }
     }
     buildGroups();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [laps, gameId]);
 
   // Reset car/lap selections when track changes (skip initial mount to preserve URL params)
@@ -212,9 +228,7 @@ function LapComparisonInner() {
   }, [carBOrd]);
 
   // Laps filtered to selected track
-  const trackLaps = selectedTrack != null
-    ? (trackGroups.find((g) => g.trackOrdinal === selectedTrack)?.laps ?? [])
-    : [];
+  const trackLaps = selectedTrack != null ? (trackGroups.find((g) => g.trackOrdinal === selectedTrack)?.laps ?? []) : [];
 
   // Unique cars on this track
   const trackCars = Array.from(new Set(trackLaps.map((l) => l.carOrdinal).filter((c): c is number => c != null)));
@@ -234,13 +248,13 @@ function LapComparisonInner() {
     try {
       const res = await client.api.laps[":id1"].compare[":id2"].$get({ param: { id1: String(lapAId), id2: String(lapBId) } });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
         const msg = body.error ?? "Failed to load comparison data";
         setError(msg.includes("no telemetry") ? "One or both laps were recorded before raw telemetry storage and cannot be compared." : msg);
         setComparison(null);
         return;
       }
-      setComparison(await res.json() as unknown as ComparisonData);
+      setComparison((await res.json()) as unknown as ComparisonData);
     } catch {
       setError("Failed to load comparison data");
       setComparison(null);
@@ -277,9 +291,7 @@ function LapComparisonInner() {
 
     let sNum = 1;
     return trackSegments.map((seg) => {
-      const displayName = (seg.type === "straight" && (!seg.name || /^S[\d?]*$/.test(seg.name)))
-        ? `S${sNum++}`
-        : (seg.type === "straight" ? (sNum++, seg.name) : seg.name);
+      const displayName = seg.type === "straight" && (!seg.name || /^S[\d?]*$/.test(seg.name)) ? `S${sNum++}` : seg.type === "straight" ? (sNum++, seg.name) : seg.name;
 
       const computeTime = (tel: typeof telA) => {
         const n = tel.length;
@@ -382,10 +394,7 @@ function LapComparisonInner() {
             onClick={toggleAiPanel}
             disabled={!comparison}
             title="Toggle AI compare panel"
-            className={aiPanelOpen
-              ? "text-app-accent border-app-accent/40 bg-app-accent/10"
-              : "hover:text-app-accent"
-            }
+            className={aiPanelOpen ? "text-app-accent border-app-accent/40 bg-app-accent/10" : "hover:text-app-accent"}
           >
             <Sparkles className="size-3.5" />
             AI Analysis
@@ -396,154 +405,134 @@ function LapComparisonInner() {
       {/* Loading / Error */}
       {(loading || error) && (
         <div className="shrink-0">
-          {loading && (
-            <div className="text-app-text-muted text-sm">Loading comparison data...</div>
-          )}
-          {error && (
-            <div className="text-red-400 text-sm">{error}</div>
-          )}
+          {loading && <div className="text-app-text-muted text-sm">Loading comparison data...</div>}
+          {error && <div className="text-red-400 text-sm">{error}</div>}
         </div>
       )}
 
       {/* No selection prompt */}
       {!lapAId || !lapBId ? (
-        <div className="flex-1 flex items-center justify-center text-app-text-dim text-sm">
-          Select two laps above to compare
-        </div>
+        <div className="flex-1 flex items-center justify-center text-app-text-dim text-sm">Select two laps above to compare</div>
       ) : lapAId === lapBId ? (
-        <div className="flex-1 flex items-center justify-center text-app-text-dim text-sm">
-          Select two different laps to compare
-        </div>
+        <div className="flex-1 flex items-center justify-center text-app-text-dim text-sm">Select two different laps to compare</div>
       ) : comparison?.traces?.distance ? (
         <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
           {/* Left: track map */}
           <div className="w-[440px] shrink-0 min-h-0">
-          <CompareTrackMap
-            outline={trackOutline ?? syntheticOutline}
-            telemetryA={comparison.telemetryA}
-            telemetryB={comparison.telemetryB}
-            labelA={`${carNames.get(comparison.lapA.carOrdinal!) || "Car A"} — Lap ${comparison.lapA.lapNumber}`}
-            labelB={`${carNames.get(comparison.lapB.carOrdinal!) || "Car B"} — Lap ${comparison.lapB.lapNumber}`}
-            lapTimeA={formatLapTime(comparison.lapA.lapTime)}
-            lapTimeB={formatLapTime(comparison.lapB.lapTime)}
-            segments={segmentTimings}
-            hoveredDistanceRef={hoveredDistanceRef}
-            redrawRef={mapRedrawRef}
-            trackOrdinal={selectedTrack}
-            gameId={gameId}
-          />
-        </div>
-
-        {/* Right column: time delta pinned + scrollable charts */}
-        <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
-          {/* Time Delta — always visible */}
-          <div className="bg-app-surface rounded-lg border border-app-border p-1 shrink-0">
-            <TimeDelta
-              distances={comparison.traces.distance}
-              timeDelta={comparison.timeDelta}
-              syncKey={SYNC_KEY}
-              height={140}
-              onCursorMove={handleCursorMove}
+            <CompareTrackMap
+              outline={trackOutline ?? syntheticOutline}
+              telemetryA={comparison.telemetryA}
+              telemetryB={comparison.telemetryB}
+              labelA={`${carNames.get(comparison.lapA.carOrdinal!) || "Car A"} — Lap ${comparison.lapA.lapNumber}`}
+              labelB={`${carNames.get(comparison.lapB.carOrdinal!) || "Car B"} — Lap ${comparison.lapB.lapNumber}`}
+              lapTimeA={formatLapTime(comparison.lapA.lapTime)}
+              lapTimeB={formatLapTime(comparison.lapB.lapTime)}
+              segments={segmentTimings}
+              hoveredDistanceRef={hoveredDistanceRef}
+              redrawRef={mapRedrawRef}
+              trackOrdinal={selectedTrack}
+              gameId={gameId}
             />
           </div>
 
-          {/* Scrollable charts */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="flex flex-col gap-4">
-          {/* Speed Chart */}
-          <div className="bg-app-surface rounded-lg border border-app-border p-1">
-            <TelemetryChart
-              data={{
-                distance: comparison.traces.distance,
-                values: [comparison.traces.speedA.map(units.fromMph), comparison.traces.speedB.map(units.fromMph)],
-                labels: [`Speed A (${units.speedLabel})`, `Speed B (${units.speedLabel})`],
-                colors: [COLOR_A, COLOR_B],
-              }}
-              syncKey={SYNC_KEY}
-              height={200}
-              title="Speed"
-              onCursorMove={handleCursorMove}
-            />
-          </div>
-
-          {/* Throttle + Brake Chart */}
-          <div className="bg-app-surface rounded-lg border border-app-border p-1">
-            <TelemetryChart
-              data={{
-                distance: comparison.traces.distance,
-                values: [
-                  comparison.traces.throttleA,
-                  comparison.traces.throttleB,
-                  comparison.traces.brakeA,
-                  comparison.traces.brakeB,
-                ],
-                labels: ["Throttle A", "Throttle B", "Brake A", "Brake B"],
-                colors: [COLOR_A, COLOR_B, "#f97316aa", "#3b82f6aa"],
-              }}
-              syncKey={SYNC_KEY}
-              height={180}
-              title="Throttle & Brake"
-              onCursorMove={handleCursorMove}
-            />
-          </div>
-
-          {/* RPM Chart */}
-          <div className="bg-app-surface rounded-lg border border-app-border p-1">
-            <TelemetryChart
-              data={{
-                distance: comparison.traces.distance,
-                values: [comparison.traces.rpmA, comparison.traces.rpmB],
-                labels: ["RPM A", "RPM B"],
-                colors: [COLOR_A, COLOR_B],
-              }}
-              syncKey={SYNC_KEY}
-              height={180}
-              title="RPM"
-              onCursorMove={handleCursorMove}
-            />
-          </div>
-
-          {/* Tire Wear Chart */}
-          {comparison.traces.tireWearA && (
-            <div className="bg-app-surface rounded-lg border border-app-border p-1">
-              <TelemetryChart
-                data={{
-                  distance: comparison.traces.distance,
-                  values: [comparison.traces.tireWearA!, comparison.traces.tireWearB!],
-                  labels: ["Tire Wear A (%)", "Tire Wear B (%)"],
-                  colors: [COLOR_A, COLOR_B],
-                }}
-                syncKey={SYNC_KEY}
-                height={160}
-                title="Tire Wear (avg all 4)"
-                onCursorMove={handleCursorMove}
-              />
+          {/* Right column: time delta pinned + scrollable charts */}
+          <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+            {/* Time Delta — always visible */}
+            <div className="bg-app-surface rounded-lg border border-app-border p-1 shrink-0">
+              <TimeDelta distances={comparison.traces.distance} timeDelta={comparison.timeDelta} syncKey={SYNC_KEY} height={140} onCursorMove={handleCursorMove} />
             </div>
+
+            {/* Scrollable charts */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="flex flex-col gap-4">
+                {/* Speed Chart */}
+                <div className="bg-app-surface rounded-lg border border-app-border p-1">
+                  <TelemetryChart
+                    data={{
+                      distance: comparison.traces.distance,
+                      values: [comparison.traces.speedA.map(units.fromMph), comparison.traces.speedB.map(units.fromMph)],
+                      labels: [`Speed A (${units.speedLabel})`, `Speed B (${units.speedLabel})`],
+                      colors: [COLOR_A, COLOR_B],
+                    }}
+                    syncKey={SYNC_KEY}
+                    height={200}
+                    title="Speed"
+                    onCursorMove={handleCursorMove}
+                  />
+                </div>
+
+                {/* Throttle + Brake Chart */}
+                <div className="bg-app-surface rounded-lg border border-app-border p-1">
+                  <TelemetryChart
+                    data={{
+                      distance: comparison.traces.distance,
+                      values: [comparison.traces.throttleA, comparison.traces.throttleB, comparison.traces.brakeA, comparison.traces.brakeB],
+                      labels: ["Throttle A", "Throttle B", "Brake A", "Brake B"],
+                      colors: [COLOR_A, COLOR_B, "#f97316aa", "#3b82f6aa"],
+                    }}
+                    syncKey={SYNC_KEY}
+                    height={180}
+                    title="Throttle & Brake"
+                    onCursorMove={handleCursorMove}
+                  />
+                </div>
+
+                {/* RPM Chart */}
+                <div className="bg-app-surface rounded-lg border border-app-border p-1">
+                  <TelemetryChart
+                    data={{
+                      distance: comparison.traces.distance,
+                      values: [comparison.traces.rpmA, comparison.traces.rpmB],
+                      labels: ["RPM A", "RPM B"],
+                      colors: [COLOR_A, COLOR_B],
+                    }}
+                    syncKey={SYNC_KEY}
+                    height={180}
+                    title="RPM"
+                    onCursorMove={handleCursorMove}
+                  />
+                </div>
+
+                {/* Tire Wear Chart */}
+                {comparison.traces.tireWearA && (
+                  <div className="bg-app-surface rounded-lg border border-app-border p-1">
+                    <TelemetryChart
+                      data={{
+                        distance: comparison.traces.distance,
+                        values: [comparison.traces.tireWearA!, comparison.traces.tireWearB!],
+                        labels: ["Tire Wear A (%)", "Tire Wear B (%)"],
+                        colors: [COLOR_A, COLOR_B],
+                      }}
+                      syncKey={SYNC_KEY}
+                      height={160}
+                      title="Tire Wear (avg all 4)"
+                      onCursorMove={handleCursorMove}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* AI compare sidebar */}
+          {aiPanelOpen && (
+            <CompareAiSidebar
+              lapA={{
+                id: lapAId!,
+                label: `${carNames.get(comparison.lapA.carOrdinal!) || "Car A"} — Lap ${comparison.lapA.lapNumber} (${formatLapTime(comparison.lapA.lapTime)})`,
+                lapTime: comparison.lapA.lapTime,
+              }}
+              lapB={{
+                id: lapBId!,
+                label: `${carNames.get(comparison.lapB.carOrdinal!) || "Car B"} — Lap ${comparison.lapB.lapNumber} (${formatLapTime(comparison.lapB.lapTime)})`,
+                lapTime: comparison.lapB.lapTime,
+              }}
+              panelRef={aiPanelRef}
+              onClose={toggleAiPanel}
+              segments={segmentTimings}
+              onJumpToFrac={handleJumpToFrac}
+            />
           )}
-
-          </div>
-          </div>
-        </div>
-
-        {/* AI compare sidebar */}
-        {aiPanelOpen && (
-          <CompareAiSidebar
-            lapA={{
-              id: lapAId!,
-              label: `${carNames.get(comparison.lapA.carOrdinal!) || "Car A"} — Lap ${comparison.lapA.lapNumber} (${formatLapTime(comparison.lapA.lapTime)})`,
-              lapTime: comparison.lapA.lapTime,
-            }}
-            lapB={{
-              id: lapBId!,
-              label: `${carNames.get(comparison.lapB.carOrdinal!) || "Car B"} — Lap ${comparison.lapB.lapNumber} (${formatLapTime(comparison.lapB.lapTime)})`,
-              lapTime: comparison.lapB.lapTime,
-            }}
-            panelRef={aiPanelRef}
-            onClose={toggleAiPanel}
-            segments={segmentTimings}
-            onJumpToFrac={handleJumpToFrac}
-          />
-        )}
         </div>
       ) : null}
     </div>
