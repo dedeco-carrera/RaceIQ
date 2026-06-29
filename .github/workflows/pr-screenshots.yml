@@ -1,0 +1,71 @@
+name: Render dashboard screenshots on PR
+
+# Re-renders the Storybook dashboard snapshots (assets/screenshots/*.png and the
+# client/src/stories/__snapshots__ baselines) on every PR and commits the result
+# back to the PR branch, so reviewers see UI changes as an image diff in the PR.
+#
+# The commit message carries [skip ci] so pushing the regenerated PNGs does not
+# retrigger this workflow (avoids an infinite loop on the `synchronize` event).
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+# Only one render per PR branch; cancel superseded runs.
+concurrency:
+  group: pr-screenshots-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    # Forked PRs get a read-only token and a detached head we can't push back to.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-2vcpu-ubuntu-2204
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          # Keep the push token so the regenerated PNGs can be committed back.
+          persist-credentials: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install client dependencies
+        working-directory: client
+        run: bun install
+
+      - name: Install Playwright Chromium
+        working-directory: client
+        run: bunx playwright install --with-deps chromium
+
+      - name: Render dashboard snapshots
+        working-directory: client
+        # snapshot = playwright test --update-snapshots && bun scripts/copy-snapshots.ts
+        # (re-renders Storybook stories, then copies them into assets/screenshots/)
+        run: bun run snapshot
+
+      - name: Upload screenshots artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-screenshots
+          path: assets/screenshots/*.png
+          retention-days: 14
+
+      - name: Commit regenerated screenshots to PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/screenshots client/src/stories/__snapshots__
+          if git diff --cached --quiet; then
+            echo "No screenshot changes to commit."
+          else
+            git commit -m "chore(ci): update dashboard screenshots [skip ci]"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
