@@ -24,6 +24,8 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2204
     permissions:
       contents: write
+      pull-requests: write
+      issues: write
 
     steps:
       - uses: actions/checkout@v4
@@ -59,13 +61,27 @@ jobs:
           retention-days: 14
 
       - name: Commit regenerated screenshots to PR branch
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/screenshots client/src/stories/__snapshots__
           if git diff --cached --quiet; then
             echo "No screenshot changes to commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore(ci): update dashboard screenshots [skip ci]"
             git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Tag PR as a UI change
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          LABEL: "ui change"
+        run: |
+          # Create the label if it doesn't exist yet (no-op if it does).
+          gh label create "$LABEL" --color FFC0CB --description "Pull request changes rendered dashboard UI" 2>/dev/null || true
+          gh pr edit "$PR" --add-label "$LABEL"
