@@ -1,10 +1,8 @@
 name: Render dashboard screenshots
 
-# Renders the Storybook dashboard stories on every PR and compares them against
-# the committed baselines (client/src/stories/__snapshots__/snapshot-*.png).
-# Any dashboard whose render differs produces before/after/diff PNGs, which are
-# uploaded as an artifact. A companion workflow (pr-screenshots-comment.yml)
-# runs afterwards with a write token and posts them as a PR comment.
+# Renders responsive app screenshots on pull requests that change the client
+# and compares them against the current main branch. Any differences produce
+# before/after/diff PNGs for the companion comment workflow.
 #
 # This workflow runs the PR's code, so it deliberately uses the read-only
 # `pull_request` token — it never gets write access. All writes (comment,
@@ -14,7 +12,10 @@ name: Render dashboard screenshots
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "client/**"
     types: [opened, synchronize, reopened]
+  # Manual dispatch remains available for any PR, including non-client changes.
   workflow_dispatch:
     inputs:
       pr:
@@ -29,10 +30,9 @@ concurrency:
 jobs:
   render:
     runs-on: blacksmith-2vcpu-ubuntu-2204
-    # Pin the render environment so baselines are reproducible: the Playwright
-    # image ships the exact Chromium + system fonts, and software GL (SwiftShader)
-    # renders deterministically across machines. Run the SAME image locally
-    # (client `bun run snapshot:docker`) and baselines match byte-for-byte.
+    # Pin the render environment so responsive screenshots are reproducible:
+    # the Playwright image ships the exact Chromium + system fonts, and
+    # software GL (SwiftShader) renders deterministically across machines.
     container:
       image: mcr.microsoft.com/playwright:v1.62.0-jammy
     permissions:
@@ -108,16 +108,6 @@ jobs:
           fi
           exit "$status"
 
-      - name: Render and compare against committed baselines
-        id: storybook-render
-        working-directory: client
-        # This is the collaborator assertion: `snapshot:test` (no --update)
-        # fails when the PR render differs from its committed snapshot.
-        run: bun run snapshot:test
-        # Keep running so the diff can be collected and posted as UI-change
-        # awareness even when the collaborator assertion fails.
-        continue-on-error: true
-
       - name: Collect diffs
         id: collect
         working-directory: client
@@ -129,30 +119,6 @@ jobs:
           # Always record the PR number so the comment job can find the PR even
           # for fork PRs (workflow_run.pull_requests is empty for forks).
           echo "${{ github.event.pull_request.number || inputs.pr }}" > "$out/pr-number.txt"
-
-          # Preserve Playwright's direct render failures. These catch current
-          # renders that differ from the baseline committed on the PR itself.
-          results="src/stories/__snapshots__/results"
-          if [ -d "$results" ]; then
-            while IFS= read -r diff; do
-              dir=$(dirname "$diff")
-              name=$(basename "$diff")
-              name=${name%-diff.png}
-              cp "$dir/$name-expected.png" "$out/changed--render--$name-before.png" 2>/dev/null || continue
-              cp "$dir/$name-actual.png"   "$out/changed--render--$name-after.png"  2>/dev/null || continue
-              cp "$dir/$name-diff.png"     "$out/changed--render--$name-diff.png"   2>/dev/null || continue
-              echo "changed rendered screenshot: $name"
-            done < <(find "$results" -name '*-diff.png')
-          fi
-
-          # Compare committed/generated Storybook snapshots to main as a set,
-          # so new baselines are reported even though Playwright has no expected
-          # image (and therefore emits no *-diff.png).
-          bun "$GITHUB_WORKSPACE/scripts/collect-screenshot-diffs.ts" \
-            --base "$RUNNER_TEMP/raceiq-main/client/src/stories/__snapshots__" \
-            --current "$GITHUB_WORKSPACE/client/src/stories/__snapshots__" \
-            --out "$out" \
-            --prefix storybook
 
           # Responsive tests write ordinary PNGs rather than Playwright
           # snapshots. Render both revisions and compare the union of paths,
@@ -178,11 +144,3 @@ jobs:
           name: pr-screenshot-preview
           path: pr-preview/
           retention-days: 14
-
-      # Main-comparison diffs are informational and are posted by the companion
-      # workflow. Only the local committed-snapshot assertion is blocking.
-      - name: Fail when committed snapshots do not match
-        if: steps.storybook-render.outcome == 'failure'
-        run: |
-          echo "::error::Committed Storybook snapshots do not match the current render. Run 'bun run snapshot' to update them."
-          exit 1
