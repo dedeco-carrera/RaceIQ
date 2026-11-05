@@ -29,6 +29,7 @@ let workerInitialized = false;
 let shutdownPromise: Promise<void> | null = null;
 const leaseListeners = new Set<(message: WriteLeaseResponse) => void>();
 const testPort = (workerData as { workerTestPort?: MessagePort } | undefined)?.workerTestPort;
+const startupSessionCutoff = (workerData as { startupSessionCutoff?: number } | undefined)?.startupSessionCutoff ?? 0;
 let testEventSequence = 0;
 const testBarriers = new Map<number, () => void>();
 testPort?.on("message", (message: { type: string; eventId?: number }) => {
@@ -129,7 +130,7 @@ const startupStages = {
       return `failed=${counts.failed}, missingCapture=${counts.missingCapture}, stale=${counts.stale}`;
     },
     async onComplete(counts, signal) {
-      await deleteEmptySessions();
+      await deleteEmptySessions(undefined, startupSessionCutoff);
       if (signal.aborted) return;
       port.postMessage({ type: "clear-stale-sessions" });
       console.log("[SessionRepair] Historical session reconciliation complete:", counts);

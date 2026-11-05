@@ -158,11 +158,14 @@ export async function bootServer(options: BootOptions = {}): Promise<RunningServ
   });
   setDashboardPublicationNotifier(() => wsManager.notifyDashboardUpdated());
   if (!dumpMode) {
+    const startupSessions = await readClient.execute("SELECT COALESCE(MAX(id), 0) AS max_id FROM sessions");
+    const startupSessionCutoff = Number(startupSessions.rows[0]?.max_id ?? 0);
     startupWorker = startStartupWorker(
       () => wsManager.notifyDashboardUpdated(),
       (reprocessed) => wsManager.broadcastNotification({ type: "lap-reprocessed", ...reprocessed }),
       () => wsManager.setStaleSessionsNotification(null),
       options.testDependencies?.workerPort,
+      startupSessionCutoff,
     );
   }
 

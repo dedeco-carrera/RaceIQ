@@ -533,6 +533,17 @@ describe("session cleanup edge cases", () => {
     }
   });
 
+  test("startup cleanup excludes sessions created after its snapshot", async () => {
+    await deleteEmptySessions();
+    const oldId = await createSession({ rawFile: capturePath("startup-old.bin") });
+    const newId = await createSession({ rawFile: capturePath("startup-new.bin") });
+    try {
+      await deleteEmptySessions(undefined, oldId);
+      expect(await db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, oldId)).get()).toBeUndefined();
+      expect((await db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, newId)).get())?.id).toBe(newId);
+    } finally { await deleteSession(newId); }
+  });
+
   test("deletes eligible empty sessions without reacquiring maintenance lock and protects active captures and jobs", async () => {
     // Earlier files share this test database and can leave eligible empty sessions.
     // Establish the empty baseline before asserting exact deletion counts for our fixtures.
