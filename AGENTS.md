@@ -99,6 +99,11 @@ bun run lighthouse             # run Lighthouse audit on local dev server
 | `UDP_PORT` | `5301` | Game telemetry UDP listen port |
 | `DATA_DIR` | `./data` | Database and settings directory |
 
+For local F1 telemetry development on acarrera's Mac, use UDP port `20778`.
+Start the full dev command with `RACEIQ_DEV_UDP_PORT=20778 bun run dev`, or set
+`RACEIQ_DEV_UDP_PORT=20778` when starting the backend directly. This is a
+machine-specific convention; the application default remains `5301`.
+
 ### Development Onboarding Flag
 
 Pass `--onboarding false` to the full development command to skip the Setup

@@ -42,6 +42,9 @@ test("private partial F1 2026 capture drives live dashboards through UDP", async
   try {
     await expect(page.getByText(/Mercedes 2026/).first()).toBeVisible();
     await page.getByRole("navigation").getByRole("link", { name: "F1 2025", exact: true }).click();
+    await page.getByRole("navigation").getByRole("link", { name: "Live", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Practice coach" })).toBeVisible();
+    await page.getByRole("navigation").getByRole("link", { name: "F1 2025", exact: true }).click();
     await page.getByRole("navigation").getByRole("link", { name: "Raw", exact: true }).click();
     await expect(page.locator('[data-telemetry-field="f1.packetFormat"] span.font-mono')).toHaveText("2026");
     await expect(page.locator('[data-telemetry-field="f1.ersHarvestLimitPerLap"] span.font-mono')).toHaveText("6600000");

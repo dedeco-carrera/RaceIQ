@@ -4,6 +4,10 @@
 - After upgrading saved AI history, keep this build or newer; older builds cannot open the updated database.
 
 ### Features
+- On the F1 live dashboard, see practice-lap observations, sector comparisons, recent consistency and low fuel or tire estimates.
+- On the F1 live dashboard, select your best, a nearby faster lap, or the fastest available reference, and share references through RaceIQ lap archives.
+- On the F1 live dashboard, enable spoken corner coaching and braking countdowns based on repeated time loss.
+- In AI chat, see when Codex needs installation or ChatGPT sign-in, or when a chat model is missing.
 - Choose Codex with ChatGPT sign-in for Driver Profile summaries without an API key.
 - In Settings → AI Analysis, choose Codex Luna or Sol for lap analysis; Luna is preselected when choosing Codex.
 - On Replay and Compare, show when Codex usage or rate limits prevent analysis and explain how to retry.

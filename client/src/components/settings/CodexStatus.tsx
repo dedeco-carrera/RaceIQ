@@ -4,7 +4,7 @@ import { m } from "@/paraglide/messages";
 import { Button } from "@/components/ui/button";
 import { FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 
-export function useCodexStatus() {
+export function useCodexStatus(enabled = true) {
   return useQuery({
     queryKey: ["codex-status"],
     queryFn: async () => {
@@ -14,6 +14,7 @@ export function useCodexStatus() {
     },
     staleTime: 30_000,
     retry: false,
+    enabled,
   });
 }
 

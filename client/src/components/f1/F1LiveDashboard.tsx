@@ -16,6 +16,8 @@ import { PitEstimate } from "../telemetry/PitEstimate";
 import { TireGrid } from "../telemetry/TireGrid";
 import { useUnits } from "../../hooks/useUnits";
 import { Button } from "../ui/button";
+import { PracticeCoach } from "./PracticeCoach";
+import { isPracticeSession } from "@raceiq/shared/racing/sessions/session-type";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,7 @@ export function F1LiveDashboard() {
   const sectors = useTelemetryStore((s) => s.sectors);
   const pit = useTelemetryStore((s) => s.pit);
   const sessionLaps = useTelemetryStore((s) => s.sessionLaps);
+  const sessionId = useTelemetryStore((s) => s.telemetryFrame?.sessionId ?? null);
   const { data: trackName } = useTrackName(view?.identity.trackId);
   const { data: carName } = useCarName(view?.identity.carId);
 
@@ -129,6 +132,7 @@ export function F1LiveDashboard() {
           showTrackMap={false}
           showSectors={true}
         />
+        {(typeof view.session.type === "string" && (isPracticeSession(view.session.type) || view.session.type === "short-practice" || view.session.type === "time-trial")) && <PracticeCoach laps={sessionLaps} sessionId={sessionId} pit={pit} trackId={view.identity.trackId} carId={view.identity.carId} view={view} />}
         <div className="shrink-0 h-[240px]">
           <LapTimeChart sessionLaps={sessionLaps} />
         </div>

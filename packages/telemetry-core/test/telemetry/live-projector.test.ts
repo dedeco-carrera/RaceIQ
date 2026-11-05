@@ -22,6 +22,15 @@ function lmuPacket(physicsSeconds: number, scoringSeconds: number, captureMs: nu
 
 
 describe("LiveTelemetryProjector", () => {
+  test("F1 live frames expose derived lap fraction for coaching", () => {
+    const projector = new LiveTelemetryProjector();
+    const sample = { ...packet("f1-2025"), DistanceTraveled: 1_350, f1: { trackLength: 5_400 } } as TelemetryPacket;
+    const result = projector.project({ packet: sample, sessionId: 1, receivedAtMs: 1000 });
+    const index = result.schema!.definitions.findIndex((definition) => definition.semanticId === "timing.lap-fraction");
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(result.frame!.values[index]).toBeCloseTo(0.25);
+    expect(result.frame!.states?.[index]).toBeUndefined();
+  });
   test("lifecycle emits schema once and increments sequence", () => {
     const projector = new LiveTelemetryProjector();
     const first = projector.project({ packet: packet("acc"), sessionId: 7, receivedAtMs: 1100 });

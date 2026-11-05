@@ -20,7 +20,7 @@ import { rmSync, readFileSync } from "node:fs";
 import { and, eq, inArray } from "drizzle-orm";
 import { unzipSync, zipSync } from "fflate";
 import { db } from "@raceiq/backend-core/db/index";
-import { sessions, laps } from "@raceiq/backend-core/db/schema";
+import { sessions, laps, sessionCaptureSplitJobs } from "@raceiq/backend-core/db/schema";
 import { initGameAdapters } from "@raceiq/game-catalogs/games/init";
 import { initServerGameAdapters } from "../../src/games/init";
 import { META_FRAME_BYTES, iterateSessionCaptureRecords, iterateSessionFrames } from "@raceiq/capture-formats/session/framing";
@@ -48,6 +48,9 @@ import { encodeLmuContext } from "@raceiq/shared/telemetry/lmu-context";
 import { importSessionBin } from "@raceiq/backend-core/session-capture/import-capture";
 import { readLmuOpponentCaptureFrames, indexLmuOpponentLaps } from "@raceiq/backend-core/lap-analysis/lmu-opponent-laps";
 import { readLmuOpponentRetention } from "@raceiq/backend-core/session-capture/lmu-companion";
+import { getLaps } from "@raceiq/backend-core/db/lap-read-queries";
+import { selectPracticeReferences } from "@raceiq/shared/racing/practice/reference";
+import { lapRoutes } from "../../src/routes/laps/index";
 initGameAdapters();
 initServerGameAdapters();
 initMotecTargets();
@@ -178,6 +181,40 @@ describe("lap export → import round-trip (real capture)", () => {
 
     const match = result.laps.find((l) => Math.abs(l.lapTime - exported.lapTime) < 0.001);
     expect(match).toBeDefined();
+  }, 120000);
+
+  test("shared F1 archive becomes a separate local practice reference", async () => {
+    const { sid, rows } = await seedSession({ capture: "test/artifacts/sessions/f1-2025-2026-04-09T21-34-10-190Z.bin.gz", gameId: "f1-2025", minimumLaps: 1 });
+    const exported = rows.filter((lap) => lap.isValid && lap.classification === "pace").sort((a, b) => a.lapTime - b.lapTime)[0];
+    expect(exported).toBeDefined();
+    const source = await db.select().from(sessions).where(eq(sessions.id, sid)).get();
+    const archive = await buildLapsZip([exported!.id]);
+    const imported = await importLapsZip(archive.bytes, { ownership: "others" });
+    expect(imported.errors).toEqual([]);
+    expect(imported.laps).toHaveLength(1);
+    createdSessions.push(imported.laps[0]!.sessionId);
+    const importedSession = await db.select().from(sessions).where(eq(sessions.id, imported.laps[0]!.sessionId)).get();
+    if (importedSession?.rawFile) tmpFiles.push(importedSession.rawFile);
+    expect(importedSession?.ownership).toBe("others");
+    const importedRow = await db.select().from(laps).where(eq(laps.id, imported.laps[0]!.lapId)).get();
+    const packets = await parseRawLapFrames(captureSource(importedSession!), importedRow!.rawByteOffset!, importedRow!.rawFrameCount!);
+    expect(packets.length).toBeGreaterThan(0);
+    // This test does not start the background split worker; simulate its
+    // completed queue after confirming the imported capture is readable.
+    await db.delete(sessionCaptureSplitJobs).where(inArray(sessionCaptureSplitJobs.sessionId, [sid, importedSession!.id])).run();
+    const candidates = await getLaps("f1-2025", 1_000_000, undefined, { trackId: source!.trackId, carId: source!.carId });
+    const catalog = selectPracticeReferences(candidates, "f1-2025", source!.trackId, source!.carId);
+    expect(catalog.candidates.some((lap) => lap.sessionId === importedSession!.id && lap.ownership === "others")).toBe(true);
+    expect(catalog.personalBest?.ownership).toBe("mine");
+    const owned = catalog.candidates.filter((lap) => lap.sessionId === sid && lap.ownership === "mine");
+    expect(owned.length).toBeGreaterThanOrEqual(3);
+    const response = await lapRoutes.request(`/api/practice/corner-plan?trackId=${encodeURIComponent(source!.trackId)}&carId=${encodeURIComponent(source!.carId)}&sessionId=${sid}&referenceId=${owned[0]!.id}&lapIds=${owned[1]!.id},${owned[2]!.id}`, { headers: { "X-Game-Id": "f1-2025" } });
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.plan?.referenceLapId).toBe(owned[0]!.id);
+    const sharedResponse = await lapRoutes.request(`/api/practice/corner-plan?trackId=${encodeURIComponent(source!.trackId)}&carId=${encodeURIComponent(source!.carId)}&sessionId=${sid}&referenceId=${imported.laps[0]!.lapId}&lapIds=${owned[1]!.id},${owned[2]!.id}`, { headers: { "X-Game-Id": "f1-2025" } });
+    expect(sharedResponse.status).toBe(200);
+    expect((await sharedResponse.json()).plan?.referenceLapId).toBe(imported.laps[0]!.lapId);
   }, 120000);
 
   for (const gameId of KNOWN_GAME_IDS) {

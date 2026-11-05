@@ -56,8 +56,10 @@ function acceptLiveCaptureLifecycle(data: Record<string, unknown>) {
 }
 
 function invalidateCaptureReadiness() {
+  queryClient.invalidateQueries({ queryKey: ["practice-corner-plan"] });
   queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
   queryClient.invalidateQueries({ queryKey: queryKeys.laps });
+  queryClient.invalidateQueries({ queryKey: ["practice-references"] });
   queryClient.invalidateQueries({ queryKey: ["track-laps"] });
   queryClient.invalidateQueries({ queryKey: ["opponent-lap-catalog"] });
 }
@@ -206,6 +208,7 @@ export function useWebSocket() {
             telemetryStore.actions.setDevState(data);
           } else if (data.type === "lap-saved") {
             queryClient.invalidateQueries({ queryKey: ["laps"] });
+            queryClient.invalidateQueries({ queryKey: ["practice-references"] });
             invalidateDashboard();
             queryClient.invalidateQueries({ queryKey: queryKeys.userTunes });
           } else if (data.type === "session-capture-split-progress") {
