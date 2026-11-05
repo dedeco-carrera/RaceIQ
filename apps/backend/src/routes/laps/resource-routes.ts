@@ -33,6 +33,8 @@ import { hasWorldPositions } from "@raceiq/shared/racing/tracks/path";
 import { BulkDeleteSchema, LapsQuerySchema, CompareLineSpreadQuerySchema, AlignedTelemetryRequestSchema, LapInsightBackfillSchema } from "./support";
 import { resolveLapCorners } from "../../tracks/corner-resolution";
 import { resolveLapF1Setup } from "@raceiq/backend-core/ai/f1-setup-identity";
+import { selectPracticeReferences } from "@raceiq/shared/racing/practice/reference";
+import { PracticePlanBusyError, runPracticeCornerPlan } from "../../practice-coach/corner-plan-runner";
 
 const gzipAsync = promisify(gzip);
 
@@ -48,6 +50,32 @@ function processingFailure(processing: readonly ProcessingMetadata[]) {
 export const resourceRoutes = new Hono()
   .route("/", replayRoutes)
   .route("/", createSessionAnalyseRoutes(resolveLapCorners))
+  .get("/api/practice/references", zValidator("query", z.object({ trackId: z.string().trim().min(1), carId: z.string().trim().min(1), tolerancePercent: z.coerce.number().min(0).max(10).optional() })), async (c) => {
+    const game = GameIdSchema.safeParse(c.req.header("X-Game-Id"));
+    if (!game.success) return c.json({ error: "Missing or invalid X-Game-Id header" }, 400);
+    const { trackId, carId, tolerancePercent } = c.req.valid("query");
+    if (trackId === "-1" || carId === "-1") return c.json({ error: "Track and car identity are required" }, 400);
+    const laps = await getLaps(game.data, 1_000_000, undefined, { trackId, carId });
+    return c.json(selectPracticeReferences(laps, game.data, trackId, carId, tolerancePercent));
+  })
+  .get("/api/practice/corner-plan", zValidator("query", z.object({ trackId: z.string().trim().min(1), carId: z.string().trim().min(1), sessionId: z.coerce.number().int().positive(), referenceId: z.coerce.number().int().positive(), lapIds: z.string().regex(/^\d+(,\d+){1,2}$/) })), async (c) => {
+    const game = GameIdSchema.safeParse(c.req.header("X-Game-Id"));
+    if (!game.success || game.data !== "f1-2025") return c.json({ error: "F1 game context required" }, 400);
+    const { trackId, carId, sessionId, referenceId, lapIds } = c.req.valid("query");
+    if (trackId === "-1" || carId === "-1") return c.json({ error: "Track and car identity are required" }, 400);
+    const ids = lapIds.split(",").map(Number);
+    if (new Set(ids).size !== ids.length || ids.includes(referenceId) || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) return c.json({ error: "Distinct comparison laps required" }, 400);
+    const metadata = await getLaps(game.data, 1_000_000, undefined, { trackId, carId });
+    const { candidates } = selectPracticeReferences(metadata, game.data, trackId, carId);
+    if (!candidates.some((lap) => lap.id === referenceId) || ids.some((id) => !candidates.some((lap) => lap.id === id && lap.sessionId === sessionId && lap.ownership === "mine"))) return c.json({ error: "Comparable reference or session laps unavailable" }, 404);
+    try {
+      const result = await runPracticeCornerPlan({ referenceId, lapIds: ids, trackId, carId, sessionId }, c.req.raw.signal);
+      if ("error" in result) return c.json(result, 422);
+      return c.json(result);
+    } catch (error) {
+      return c.json({ error: error instanceof PracticePlanBusyError ? "Practice coaching is busy" : "Practice coaching unavailable" }, error instanceof PracticePlanBusyError ? 503 : 500);
+    }
+  })
   .get("/api/laps", zValidator("query", LapsQuerySchema), async (c) => {
     const { gameId, sessionId } = c.req.valid("query");
     const lapList = sessionId != null ? await getSessionLaps(gameId!, sessionId) : await getLaps(gameId);
@@ -119,6 +147,29 @@ export const resourceRoutes = new Hono()
     const body = JSON.stringify(encodeAlignedLapSet(set) as EncodedAlignedLapSet);
     if (request.step === 1) alignedTelemetryCacheSet(request.ids, body);
     return c.body(body, 200, { "Content-Type": "application/json; charset=UTF-8", "X-RaceIQ-Cache": "MISS" });
+  })
+  .get("/api/laps/:id/practice-insights", zValidator("param", IdParamSchema), async (c) => {
+    const game = GameIdSchema.safeParse(c.req.header("X-Game-Id"));
+    if (!game.success) return c.json({ error: "Missing or invalid X-Game-Id header" }, 400);
+    const { id } = c.req.valid("param");
+    const [row] = await getLapProcessingByIds([id]);
+    if (!row || row.gameId !== game.data) return c.json({ error: "Lap not found" }, 404);
+    const blocked = processingFailure([row.processing]);
+    if (blocked) return c.json({ code: blocked.code, error: blocked.error }, blocked.status);
+    const lap = await getLapById(id, row.processing);
+    if (!lap || lap.gameId !== game.data) return c.json({ error: "Lap not found" }, 404);
+    const findings = await getOrComputeLapInsights(id);
+    if (lap.parseError || !findings) return c.json({ error: "Lap observations unavailable" }, 422);
+    const first = lap.telemetry[0]?.DistanceTraveled;
+    const last = lap.telemetry.at(-1)?.DistanceTraveled;
+    const insights = findings.filter((finding) => finding.category === "driving").map((finding) => {
+      const distance = lap.telemetry[finding.frameIndices[0] ?? -1]?.DistanceTraveled;
+      const progress = typeof first === "number" && typeof last === "number" && typeof distance === "number"
+        && Number.isFinite(first) && Number.isFinite(last) && Number.isFinite(distance) && last > first
+        && distance >= first && distance <= last ? (distance - first) / (last - first) : null;
+      return { id: finding.id, severity: finding.severity, label: finding.label, detail: finding.detail, progress };
+    });
+    return c.json({ insights });
   })
   .get("/api/laps/:id/setup", zValidator("param", IdParamSchema), async (c) => {
     const gameIdResult = GameIdSchema.safeParse(c.req.header("X-Game-Id"));

@@ -128,7 +128,7 @@ async function main() {
     );
   }
 
-  compileArgs.push("apps/backend/src/bootstrap.ts", "server/experiments/lap-issues-worker.ts", "apps/backend/src/runtime/startup-worker-entry.ts",
+  compileArgs.push("apps/backend/src/bootstrap.ts", "server/experiments/lap-issues-worker.ts", "apps/backend/src/runtime/startup-worker-entry.ts", "apps/backend/src/practice-coach/corner-plan-worker.ts",
     "packages/capture-splitting/src/worker.ts", "packages/capture-formats/src/session/source-writer-worker.ts",
     "apps/backend/src/session-capture/live-worker-entry.ts", "server/session-capture/lmu-opponent-index-worker.ts", "--outfile", join(distDir, "raceiq"));
 

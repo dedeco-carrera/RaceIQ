@@ -107,6 +107,7 @@
     "./lap-analysis/insights": "./lap-analysis/insights.ts",
     "./lap-analysis/metrics-store": "./lap-analysis/metrics-store.ts",
     "./lap-analysis/metrics": "./lap-analysis/metrics.ts",
+    "./practice-coach/corner-analysis": "./practice-coach/corner-analysis.ts",
     "./lap-analysis/recap": "./lap-analysis/recap.ts",
     "./lap-analysis/report": "./lap-analysis/report.ts",
     "./lap-analysis/stats": "./lap-analysis/stats.ts",

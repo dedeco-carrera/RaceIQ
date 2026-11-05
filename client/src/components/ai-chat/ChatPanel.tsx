@@ -7,7 +7,8 @@ import { useState } from "react";
 import type { ThreadProps } from "@/components/assistant-ui/thread";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/settings";
-import { isAiChatConfigured } from "@/lib/is-ai-configured";
+import { aiReadiness } from "@/lib/is-ai-configured";
+import { useCodexStatus } from "@/components/settings/CodexStatus";
 import { authenticatedFetch } from "@/lib/rpc";
 import { m } from "@/paraglide/messages";
 import { uiStore } from "@/stores/ui";
@@ -32,9 +33,10 @@ export interface ChatPanelProps {
 }
 
 export function ChatPanel({ api, clearChatApi, fetchHistory, historyQueryKey, remountKey, onFinish, components, emptyState, className, extraBody, compactThreadId, inputDisabled }: ChatPanelProps) {
-  const { displaySettings } = useSettings();
+  const { displaySettings, settingsLoaded } = useSettings();
+  const codexStatus = useCodexStatus(settingsLoaded && displaySettings.chatProvider === "codex");
   const openSettings = uiStore.actions.openSettings;
-  const aiConfigured = isAiChatConfigured(displaySettings);
+  const readiness = aiReadiness(displaySettings.chatProvider ?? "", displaySettings.chatModel, displaySettings, codexStatus.isError ? "unavailable" : codexStatus.data?.state);
   const visionCapability = resolveChatVisionCapability(displaySettings.chatProvider, displaySettings.chatModel);
   const queryClient = useQueryClient();
   const [clearVersion, setClearVersion] = useState(0);
@@ -112,11 +114,21 @@ export function ChatPanel({ api, clearChatApi, fetchHistory, historyQueryKey, re
     }
   };
 
-  if (!aiConfigured) {
+  if (!settingsLoaded || (displaySettings.chatProvider === "codex" && codexStatus.isPending)) {
+    return <div className="flex h-full min-h-0 flex-col gap-1.5 pt-2 text-app-compact text-app-text-dim">{m.common_loading()}</div>;
+  }
+  if (readiness !== "ready") {
+    const message = readiness === "not-signed-in" ? m.ai_codex_login()
+      : readiness === "cli-unavailable" ? m.ai_codex_missing()
+        : readiness === "unsupported-runtime" ? m.ai_codex_unsupported()
+          : readiness === "unavailable" ? m.ai_codex_unavailable()
+            : readiness === "missing-key" ? m.ai_chat_add_provider_key()
+              : readiness === "missing-model" ? m.ai_chat_select_model()
+              : m.ai_configure_feature_description();
     return (
       emptyState ?? (
         <div className="flex flex-col gap-1.5 pt-2">
-          <p className="text-app-compact text-app-text-dim">{m.ai_chat_add_provider_key()}</p>
+          <p className="text-app-compact text-app-text-dim">{message}</p>
           <Button type="button" variant="ai-action" size="app-md" onClick={() => openSettings("ai")} className="w-full">
             {m.ai_chat_setup_ai()}
           </Button>

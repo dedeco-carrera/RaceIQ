@@ -110,7 +110,7 @@ export async function getLapStats(gameId?: GameId): Promise<LapStats> {
  * Optionally filter by profileId.
  */
 
-export async function getLaps(gameId?: GameId, limit: number = 200, sessionId?: number): Promise<LapMeta[]> {
+export async function getLaps(gameId?: GameId, limit: number = 200, sessionId?: number, scope?: { trackId: string; carId: string }): Promise<LapMeta[]> {
   const query = readDb.select({
     id: laps.id,
     sessionId: laps.sessionId,
@@ -161,7 +161,7 @@ export async function getLaps(gameId?: GameId, limit: number = 200, sessionId?: 
   const rows = sessionId != null
     ? await query.where(and(eq(sessions.gameId, gameId!), eq(laps.sessionId, sessionId))).all()
     : gameId
-      ? await query.where(eq(sessions.gameId, gameId)).all()
+      ? await query.where(scope ? and(eq(sessions.gameId, gameId), eq(sessions.trackId, scope.trackId), eq(sessions.carId, scope.carId)) : eq(sessions.gameId, gameId)).all()
       : await query.all();
 
   return (await withLapProcessingMetadata(rows)).map(toLapMeta);

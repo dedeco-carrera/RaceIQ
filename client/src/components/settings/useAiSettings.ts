@@ -8,6 +8,7 @@ import { PROVIDER_KEY_LABELS, PROVIDER_KEY_MAP } from "./ai-state";
 import { isAiProvider, useAiModelData } from "./useAiModelData";
 import { modelsOrFallback } from "./recommended-model";
 import { useCodexStatus } from "./CodexStatus";
+import { isProviderConfigured } from "@/lib/is-ai-configured";
 
 type SavedAnalysisBaseline = { provider: string; model: string; thinkingBudget: number | null; localEndpoint: string };
 type SavedChatBaseline = { provider: string; model: string; thinkingBudget: number | null };
@@ -200,12 +201,13 @@ export function useAiSettings(): AiSettingsState {
   };
   const { aiProviders, aiModels, aiModelsFetching, aiModelsError, modelsRefreshing, refreshModels: refreshModelsAction } = useAiModelData(selectedProviders, keyStatus);
   const models = provider === "codex" ? (codexStatus.data?.models ?? []) : modelsOrFallback(provider, isAiProvider(provider) ? (aiModels?.[provider] ?? []) : []);
-  const hasProviderKey = provider === "openai-compatible" || (keyStatus[provider] ?? false);
+  const providerReady = (value: string) => isProviderConfigured(value, displaySettings, codexStatus.data?.state ?? "unavailable");
+  const hasProviderKey = providerReady(provider);
   const canShowModelPicker = provider !== "" && hasProviderKey && models.length > 0;
   const modelSupportsThinking = provider === "gemini" && supportsGeminiThinkingBudget(model || "gemini-flash-latest");
   const effectiveThinkingBudget = modelSupportsThinking ? thinkingBudget : null;
   const chatModels = chatProvider === "codex" ? (codexStatus.data?.models ?? []) : modelsOrFallback(chatProvider, isAiProvider(chatProvider) ? (aiModels?.[chatProvider] ?? []) : []);
-  const hasChatProviderKey = chatProvider === "codex" ? codexStatus.data?.state === "ready" : chatProvider === "openai-compatible" || (keyStatus[chatProvider] ?? false);
+  const hasChatProviderKey = providerReady(chatProvider);
   const canShowChatModelPicker = chatProvider !== "" && hasChatProviderKey && chatModels.length > 0;
   const chatModelSupportsThinking = chatProvider === "gemini" && supportsGeminiThinkingBudget(chatModel || "gemini-flash-latest");
   const effectiveChatThinkingBudget = chatModelSupportsThinking ? chatThinkingBudget : null;
@@ -213,11 +215,11 @@ export function useAiSettings(): AiSettingsState {
   const providerModelError = isAiProvider(provider) ? (modelErrors[provider] ?? null) : null;
   const chatProviderModelError = chatProvider === "codex" && codexStatus.isError ? m.ai_codex_unavailable() : isAiProvider(chatProvider) ? (modelErrors[chatProvider] ?? null) : null;
   const autoTuneModels = autoTuneProvider === "codex" ? (codexStatus.data?.models ?? []) : modelsOrFallback(autoTuneProvider, isAiProvider(autoTuneProvider) ? (aiModels?.[autoTuneProvider] ?? []) : []);
-  const hasAutoTuneProviderKey = autoTuneProvider === "codex" ? codexStatus.data?.state === "ready" : autoTuneProvider === "openai-compatible" || (keyStatus[autoTuneProvider] ?? false);
+  const hasAutoTuneProviderKey = providerReady(autoTuneProvider);
   const canShowAutoTuneModelPicker = autoTuneProvider !== "" && hasAutoTuneProviderKey && autoTuneModels.length > 0;
   const autoTuneProviderModelError = autoTuneProvider === "codex" && codexStatus.isError ? m.ai_codex_unavailable() : isAiProvider(autoTuneProvider) ? (modelErrors[autoTuneProvider] ?? null) : null;
   const driverProfileModels = driverProfileProvider === "codex" ? (codexStatus.data?.models ?? []) : modelsOrFallback(driverProfileProvider, isAiProvider(driverProfileProvider) ? (aiModels?.[driverProfileProvider] ?? []) : []);
-  const hasDriverProfileProviderKey = driverProfileProvider === "openai-compatible" || (keyStatus[driverProfileProvider] ?? false);
+  const hasDriverProfileProviderKey = providerReady(driverProfileProvider);
   const canShowDriverProfileModelPicker = driverProfileProvider !== "" && hasDriverProfileProviderKey && driverProfileModels.length > 0;
   const driverProfileModelSupportsThinking = driverProfileProvider === "gemini" && supportsGeminiThinkingBudget(driverProfileModel || "gemini-flash-latest");
   const selectedDriverProfileModel = driverProfileModels.find((mm) => mm.id === driverProfileModel);

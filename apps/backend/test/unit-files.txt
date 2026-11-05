@@ -9,6 +9,8 @@ apps/backend/test/ai/providers/usage-normalization.test.ts
 apps/backend/test/ai/tools/generate-lap-analysis.test.ts
 apps/backend/test/archive/bounded-unzip.test.ts
 apps/backend/test/games/shared/parser.test.ts
+apps/backend/test/practice-coach/corner-analysis.test.ts
+apps/backend/test/practice-coach/reference-selection.test.ts
 apps/backend/test/lap-analysis/clean-lap-aggregate.test.ts
 apps/backend/test/ai/setup-output-contract.test.ts
 apps/backend/test/lap-analysis/comparison.test.ts
