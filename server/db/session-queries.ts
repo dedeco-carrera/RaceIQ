@@ -727,7 +727,7 @@ export async function deleteSession(sessionId: number): Promise<number> {
   return deleted.lapCount;
 }
 
-export async function deleteEmptySessions(activeSessionId?: number): Promise<number> {
+export async function deleteEmptySessions(activeSessionId?: number, maxSessionId?: number): Promise<number> {
   const outcome = await withSessionCaptureMaintenanceLock(async () => {
     const empties = await readDb.select({ id: sessions.id })
       .from(sessions)
@@ -736,7 +736,7 @@ export async function deleteEmptySessions(activeSessionId?: number): Promise<num
       .groupBy(sessions.id)
       .having(sql`count(${laps.id}) = 0`)
       .all();
-    const candidateIds = empties.filter(({ id }) => id !== activeSessionId).map(({ id }) => id);
+    const candidateIds = empties.filter(({ id }) => id !== activeSessionId && (maxSessionId === undefined || id <= maxSessionId)).map(({ id }) => id);
     if (candidateIds.length === 0) return { deleted: 0, indexSourcePaths: [] as string[] };
     const activeJobs = await readDb.select({ sessionId: sessionCaptureSplitJobs.sessionId })
       .from(sessionCaptureSplitJobs)

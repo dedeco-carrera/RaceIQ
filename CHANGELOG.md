@@ -21,6 +21,7 @@
 - Use 2026 active-aero, overtake and harvest-limit readings in F1 AI lap analysis and chat.
 
 ### Fixes
+- Preserve newly started recordings while startup cleans up empty sessions.
 - Show 2025 F2 team names on F1 25 recordings instead of numeric team IDs.
 - On Replay, show F1 circuit overviews and the large track view in the correct orientation.
 - On Replay, align F1 car wheels, suspension and brake details with the corrected track orientation.

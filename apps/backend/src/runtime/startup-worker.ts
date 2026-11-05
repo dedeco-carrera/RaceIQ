@@ -11,7 +11,7 @@ type WorkerMessage = { type: "publication" } | { type: "ready" } | { type: "lap-
 export interface StartupWorkerHandle { stop(): Promise<void>; }
 export type StartupWorkerTestEvent = { type: "candidatePrepared" | "transactionOpen" | "beforeCommit" | "afterCommit"; eventId: number; sessionId: number } | { type: "stageEntered"; stage: "historical" | "lmu-identity" | "race-results" | "dashboard"; eventId: number } | { type: "workerStopped" | "workerExited"; code?: number };
 
-export function startStartupWorker(notifyDashboardUpdated: () => void, notifyLapReprocessed: (reprocessed: ReprocessResult) => void, clearStaleSessions: () => void, workerTestPort?: MessagePort): StartupWorkerHandle {
+export function startStartupWorker(notifyDashboardUpdated: () => void, notifyLapReprocessed: (reprocessed: ReprocessResult) => void, clearStaleSessions: () => void, workerTestPort?: MessagePort, startupSessionCutoff = 0): StartupWorkerHandle {
   const runtime = ManagedRuntime.make(Layer.empty);
   let stopping = false;
   let stopPromise: Promise<void> | null = null;
@@ -20,7 +20,7 @@ export function startStartupWorker(notifyDashboardUpdated: () => void, notifyLap
 
   function createWorkerResource(): StartupWorkerHandle {
     const testChannel = workerTestPort ? new MessageChannel() : null;
-    const worker = new Worker(IS_COMPILED ? "./apps/backend/src/runtime/startup-worker-entry.ts" : new URL("./startup-worker-entry", import.meta.url), testChannel ? { workerData: { workerTestPort: testChannel.port1 }, transferList: [testChannel.port1] } : undefined);
+    const worker = new Worker(IS_COMPILED ? "./apps/backend/src/runtime/startup-worker-entry.ts" : new URL("./startup-worker-entry", import.meta.url), { workerData: { startupSessionCutoff, ...(testChannel ? { workerTestPort: testChannel.port1 } : {}) }, ...(testChannel ? { transferList: [testChannel.port1] } : {}) });
     let exited = false;
     let acknowledged = false;
     const { promise: exit, resolve: resolveExit, reject: rejectExit } = Promise.withResolvers<void>();
