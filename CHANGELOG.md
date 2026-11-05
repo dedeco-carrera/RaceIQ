@@ -36,6 +36,7 @@
 - Restore iRacing and Automobilista 2 in the Windows app sidebar.
 
 ### Internal
+- Skip pending password setup on loopback for development sessions started with `--onboarding false`.
 - Prepare the private Apple Silicon build `0.20.0-private.20261031.1` for local UDP telemetry testing; no public release is published.
 - Bind isolated, bounded Codex generation to central provider resolution and analysis endpoints, returning fresh-run diagnostics, preserving Codex settings and draining owned CLI operations before storage closes; chat and engineering integrations remain in progress.
 - Introduce the macOS Tauri host and isolated backend lifecycle checks for allocated loopback ports, readiness, persistence and graceful shutdown; native-app acceptance remains in progress.

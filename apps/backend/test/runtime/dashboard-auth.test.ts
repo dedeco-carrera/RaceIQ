@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { migrations } from "@raceiq/backend-core/db/migrations";
 import { DashboardAuth, setDashboardAuth, validateNetwork } from "../../src/runtime/dashboard-auth";
+import { configureDevAccess } from "../../src/runtime/dev-access";
 import { createHttpAccess } from "../../src/runtime/http-access";
 import { Hono } from "hono";
 import { authRoutes } from "../../src/routes/auth-routes";
@@ -112,6 +113,37 @@ const cookieRequest = (cookie: string, headers: HeadersInit = {}, method = "GET"
 const BunWebSocket = globalThis.WebSocket as unknown as { new (url: string, options: { headers: HeadersInit }): WebSocket };
 
 describe("persistent dashboard authentication", () => {
+  test("development bypass only configures pending loopback access", async () => {
+    const f = await fixture();
+    try {
+      await f.auth.initialize(false);
+      const env = { RACEIQ_DEV_NO_PASSWORD: "1", SERVER_HOST: "127.0.0.1" };
+      expect(await configureDevAccess(f.auth, env, true)).toBe(false);
+      expect(await configureDevAccess(f.auth, { ...env, NODE_ENV: "production" }, false)).toBe(false);
+      expect(await configureDevAccess(f.auth, { ...env, SERVER_HOST: "0.0.0.0" }, false)).toBe(false);
+      expect(await f.auth.isPending()).toBe(true);
+      expect(await configureDevAccess(f.auth, env, false)).toBe(true);
+      expect(await f.auth.isProtected()).toBe(false);
+      expect(await configureDevAccess(f.auth, env, false)).toBe(false);
+    } finally { await f.close(); }
+  });
+  test("development bypass preserves an existing password", async () => {
+    const f = await fixture();
+    try {
+      await f.auth.initialize(false);
+      await f.auth.setup("abcdefgh", false);
+      expect(await configureDevAccess(f.auth, { RACEIQ_DEV_NO_PASSWORD: "1", SERVER_HOST: "127.0.0.1" }, false)).toBe(false);
+      expect(await f.auth.isProtected()).toBe(true);
+    } finally { await f.close(); }
+  });
+  test("development bypass refuses a saved public listener", async () => {
+    const f = await fixture();
+    try {
+      await f.auth.initialize(true);
+      expect(await configureDevAccess(f.auth, { RACEIQ_DEV_NO_PASSWORD: "1", SERVER_HOST: "127.0.0.1" }, false)).toBe(false);
+      expect(await f.auth.isPending()).toBe(true);
+    } finally { await f.close(); }
+  });
   test("configured state cannot revert to first-run setup; markers contain no credentials", async () => {
     for (const password of ["abcdefgh", null]) {
       const f = await fixture();
