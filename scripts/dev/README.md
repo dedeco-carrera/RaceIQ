@@ -13,6 +13,8 @@ Start local development services.
 
 Inputs: optional onboarding override, `SERVER_PORT` for a fixed backend port, `PORT` for Mastra Studio, and local source/dependencies. Outputs: inherited child-process logs and exit status from development process. Portless provides `http://<branch>.raceiq-<worktree-id>.localhost:1355` for linked worktrees (actual URL printed at startup) and `http://raceiq.localhost:1355` for main checkout.
 
+`bun run dev --onboarding false` also initializes pending dashboard access without a password and binds the development HTTP server to loopback when `SERVER_HOST` is unset and the saved network configuration is loopback-only. Existing access configurations are preserved. Production builds ignore this development option.
+
 Startup does not open a browser automatically. Open the printed Portless URL manually when needed.
 
 Dump launchers must not use `--watch` or force-kill the backend process tree. Backend boot announces `{ "type": "shutdown-ready" }` on its inherited IPC channel after ingress owners are registered. The launcher sends `{ "type": "shutdown" }` on Ctrl+C or client exit, waits for backend finalization and exit, then stops the client. Early Ctrl+C waits for readiness rather than losing the shutdown request. Finalization failures propagate as nonzero exit; LMU reports the absolute saved BIN path and frame count only after successful file close. Normal `bun dev` watching is unchanged.

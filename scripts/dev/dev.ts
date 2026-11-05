@@ -54,6 +54,7 @@ const portlessName = worktreeId ? `raceiq-${worktreeId}` : "raceiq";
 const environment = {
   ...process.env,
   SERVER_PORT: serverPort,
+  ...(onboarding === false && !process.env.SERVER_HOST ? { SERVER_HOST: "127.0.0.1", RACEIQ_DEV_NO_PASSWORD: "1" } : {}),
   RACEIQ_DEV_PORTLESS_NAME: portlessName,
   ...(udpPort ? { RACEIQ_DEV_UDP_PORT: udpPort } : {}),
 };

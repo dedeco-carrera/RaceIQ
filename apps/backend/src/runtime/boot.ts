@@ -36,6 +36,7 @@ import { notifyDriverProfileLap } from "../driver-profile/runner";
 import { DashboardAuth, setDashboardAuth } from "./dashboard-auth";
 import { configureHttpAccess, httpAccess } from "./http-access";
 import { readDesktopHostOptions } from "./desktop-host";
+import { configureDevAccess } from "./dev-access";
 
 export interface BootOptions {
   httpPort?: number;
@@ -86,7 +87,11 @@ export async function bootServer(options: BootOptions = {}): Promise<RunningServ
   await initDb();
   await recoverRecordingDirectoryMove();
   const auth = await DashboardAuth.create(client, DB_PATH, process.env, false, readClient);
-  await auth.initialize(upgradingAccess);
+  const devLoopbackAccess = !IS_COMPILED && process.env.NODE_ENV !== "production" && process.env.RACEIQ_DEV_NO_PASSWORD === "1" && process.env.SERVER_HOST === "127.0.0.1";
+  await auth.initialize(devLoopbackAccess ? false : upgradingAccess);
+  if (await configureDevAccess(auth, process.env, IS_COMPILED)) {
+    console.log("[Server] Development access configured without a password on loopback");
+  }
   setDashboardAuth(auth);
   await configureHttpAccess(auth, httpPort);
   await hydrateDiscoveredAcEvoCars();
