@@ -24,7 +24,7 @@ describe("practice cue scheduling", () => {
     if (feedback?.type === "feedback") expect(feedback.differenceS).toBeCloseTo(-0.2, 3);
   });
 
-  test("suppresses cues after a gap or stale telemetry until next lap", () => {
+  test("does not immediately resume cues after a gap or stale telemetry", () => {
     const scheduler = new PracticeCueScheduler();
     scheduler.step(frame(1, 1, 0.99), plan, 100, 0);
     scheduler.step(frame(2, 2, 0), plan, 200, 0);
@@ -78,6 +78,20 @@ describe("practice cue scheduling", () => {
       events.push(...scheduler.step(next, plan, next.receivedAtMs, 0));
     }
     expect(events.some((event) => event.type === "prepare")).toBe(true);
+  });
+
+  test("recovers after a gap only with sustained fresh data and enough approach time", () => {
+    const scheduler = new PracticeCueScheduler();
+    const distant = { ...plan, trackLengthM: 2_000 };
+    scheduler.step(frame(1, 1, 0.99), distant, 100, 0);
+    scheduler.step(frame(2, 2, 0), distant, 200, 0);
+    scheduler.suspend();
+    for (let index = 3; index <= 15; index++) scheduler.step(frame(index, 2, (index - 3) * 0.001), distant, index * 100, 0);
+    expect(scheduler.isBlocked).toBe(false);
+
+    scheduler.suspend();
+    for (let index = 16; index <= 28; index++) scheduler.step(frame(index, 2, 0.3 + (index - 16) * 0.001), distant, index * 100, 0);
+    expect(scheduler.isBlocked).toBe(true);
   });
 
   test("does not arm on a teleport or a discontinuous lap transition", () => {

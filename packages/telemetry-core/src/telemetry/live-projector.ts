@@ -58,7 +58,13 @@ export class LiveTelemetryProjector {
 
   private startStream(gameId: GameId, sessionId: number | null): void {
     this.gameId = gameId; this.sessionId = sessionId; this.sequence = -1; this.view = undefined;
-    this.resolver = compileTelemetryResolver({ simulator: gameId, requested: liveSemanticIds(gameId).map((semanticId) => ({ semanticId })) });
+    this.resolver = compileTelemetryResolver({
+      simulator: gameId,
+      requested: liveSemanticIds(gameId).map((semanticId) => ({ semanticId })),
+      // F1 track length is session geometry: an unchanged value stays valid
+      // until the session stream changes, even in a long practice session.
+      ...(gameId === "f1-2025" ? { staleAfterMs: { "timing.track-length": Number.POSITIVE_INFINITY } } : {}),
+    });
     const ids = liveSemanticIds(gameId);
     const schemaId = hash(["live", "1", gameId, this.resolver.catalogVersion, this.resolver.catalogHash, this.resolver.schemaVersion, this.resolver.parserVersion, this.resolver.resolverVersion, this.resolver.derivationVersion, ...ids]);
     this.schema = encodeLiveSchema(ids.map((semanticId) => ({ semanticId, unit: null, mappingStatus: "unavailable", schemaVersion: this.resolver!.schemaVersion, limitations: [] })), { schemaId, simulator: gameId, catalogVersion: this.resolver.catalogVersion, catalogHash: this.resolver.catalogHash, catalogSchemaVersion: this.resolver.schemaVersion, parserVersion: this.resolver.parserVersion, resolverVersion: this.resolver.resolverVersion, derivationVersion: this.resolver.derivationVersion });

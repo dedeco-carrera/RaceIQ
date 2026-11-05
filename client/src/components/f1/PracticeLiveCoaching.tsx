@@ -54,6 +54,7 @@ export function PracticeLiveCoaching({ reference, laps, view }: { reference: Lap
     queryKey: ["practice-corner-plan", view.sessionId, trackId, carId, reference?.id, lapIds],
     enabled: !!reference && view.sessionId !== null && recent.length >= 2 && !!trackId && !!carId,
     staleTime: Infinity,
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === view.sessionId && previousQuery.queryKey[2] === trackId && previousQuery.queryKey[3] === carId ? previous : undefined,
     retry: 2,
     retryDelay: 1000,
     queryFn: async () => {
@@ -69,7 +70,7 @@ export function PracticeLiveCoaching({ reference, laps, view }: { reference: Lap
   useEffect(() => {
     const ready = (id: string) => view.statusBySemanticId[id]?.resolution === "ok" && view.statusBySemanticId[id]?.freshness === "fresh";
     if (view.sessionId === null || view.timing.lapNumber === undefined || view.timing.lapFraction === undefined || view.motion.speedMps === undefined || view.inputs.brake === undefined || Date.now() - view.receivedAtMs > 250 || !ready("timing.lap-fraction") || !ready("motion.speed") || !ready("inputs.brake")) {
-      scheduler.current.reset();
+      scheduler.current.suspend();
       window.speechSynthesis?.cancel();
       return;
     }
@@ -91,7 +92,7 @@ export function PracticeLiveCoaching({ reference, laps, view }: { reference: Lap
         }
       }
     }
-    const staleTimer = window.setTimeout(() => { scheduler.current.reset(); window.speechSynthesis?.cancel(); }, 300);
+    const staleTimer = window.setTimeout(() => { scheduler.current.suspend(); window.speechSynthesis?.cancel(); }, 300);
     return () => window.clearTimeout(staleTimer);
   }, [view, plan, audioEnabled, delay, validLatency]);
 

@@ -58,6 +58,20 @@ acceptance criteria and the distinction between browser and WKWebView coverage.
 Typecheck this gate with `bun check --project tsconfig.udp.json`.
 Use `E2E_SERVER_MODE=dev` for a Bun/Vite diagnostic run.
 
+To watch and hear the practice coach, use a local F1 practice/time-trial
+capture manifest containing laps 1–5, then run from the repository root:
+
+```sh
+RACEIQ_F1_PRACTICE_MANIFEST=/absolute/path/to/capture-manifest.json RACEIQ_COACH_DEMO=1 E2E_SERVER_MODE=dev bunx playwright test --config=playwright/udp.config.ts playwright/tests/udp/practice-real-session.spec.ts --project=udp-chromium --workers=1 --headed
+```
+
+The server uses a separate test database and UDP port 15332. The recording is
+played at 4x during warm-up; a final simulated lap reuses the last recorded
+lap's inputs at real speed so coaching can be observed. The browser uses real
+audio in demo mode; unmute its tab and select the desired system output. The
+private recording is not uploaded or committed. Without `RACEIQ_COACH_DEMO=1`,
+the test intercepts audio output to assert spoken cues automatically.
+
 ### General suite
 
 ```sh

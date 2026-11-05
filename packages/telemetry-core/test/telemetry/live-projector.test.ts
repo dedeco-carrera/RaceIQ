@@ -30,6 +30,9 @@ describe("LiveTelemetryProjector", () => {
     expect(index).toBeGreaterThanOrEqual(0);
     expect(result.frame!.values[index]).toBeCloseTo(0.25);
     expect(result.frame!.states?.[index]).toBeUndefined();
+    const later = projector.project({ packet: { ...sample, TimestampMS: 400_000, DistanceTraveled: 2_700 }, sessionId: 1, receivedAtMs: 400_000 });
+    expect(later.frame!.values[index]).toBeCloseTo(0.5);
+    expect(later.frame!.states?.[index]).toBeUndefined();
   });
   test("lifecycle emits schema once and increments sequence", () => {
     const projector = new LiveTelemetryProjector();

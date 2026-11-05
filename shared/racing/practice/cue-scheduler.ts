@@ -27,6 +27,10 @@ export class PracticeCueScheduler {
   private entryMs: number | null = null;
   private completed = false;
   private readonly emitted = new Set<number>();
+  private armedLap: number | null = null;
+  private armedStream: string | null = null;
+  private armedSession: number | null = null;
+  private recoveryStart: number | null = null;
 
   get isBlocked(): boolean { return this.blocked; }
 
@@ -39,15 +43,31 @@ export class PracticeCueScheduler {
     this.entryMs = null;
     this.completed = false;
     this.emitted.clear();
+    this.armedLap = null;
+    this.armedStream = null;
+    this.armedSession = null;
+    this.recoveryStart = null;
+  }
+
+  /** Stop cues immediately, retaining the pinned plan for a safe recovery. */
+  suspend(): void {
+    this.previous = null;
+    this.blocked = true;
+    this.recoveryStart = null;
   }
 
   step(frame: PracticeCueFrame, candidate: PracticeCornerPlan | null, nowMs: number, outputLatencyMs: number): PracticeCue[] {
     const valid = [frame.sequence, frame.sessionId, frame.lapNumber, frame.fraction, frame.speedMps, frame.brake, frame.observedAtMs, frame.receivedAtMs, nowMs, outputLatencyMs].every(Number.isFinite)
       && frame.sessionId > 0 && frame.lapNumber > 0 && frame.fraction >= 0 && frame.fraction <= 1 && frame.speedMps >= 0 && frame.brake >= 0 && frame.brake <= 255
       && nowMs >= frame.receivedAtMs && nowMs - frame.receivedAtMs <= 250;
-    if (!valid) { this.blocked = true; this.previous = null; return []; }
+    if (!valid) { this.suspend(); return []; }
     const previous = this.previous;
-    if (!previous || previous.streamId !== frame.streamId || previous.sessionId !== frame.sessionId) {
+    if (!previous) {
+      if (this.plan && (frame.streamId !== this.armedStream || frame.sessionId !== this.armedSession || frame.lapNumber !== this.armedLap)) this.reset();
+      this.previous = frame;
+      return [];
+    }
+    if (previous.streamId !== frame.streamId || previous.sessionId !== frame.sessionId) {
       this.reset();
       this.previous = frame;
       return [];
@@ -60,6 +80,10 @@ export class PracticeCueScheduler {
       const continuousBoundary = frame.lapNumber === previous.lapNumber + 1 && previous.fraction >= 0.9 && frame.fraction < 0.1 && frame.sequence > previous.sequence && boundaryGap > 0 && boundaryGap <= 250;
       this.plan = continuousBoundary && usable ? candidate : null;
       this.blocked = !this.plan;
+      this.armedLap = this.plan ? frame.lapNumber : null;
+      this.armedStream = this.plan ? frame.streamId : null;
+      this.armedSession = this.plan ? frame.sessionId : null;
+      this.recoveryStart = null;
       this.prepared = false;
       this.braked = false;
       this.entryMs = null;
@@ -75,11 +99,25 @@ export class PracticeCueScheduler {
     if (dt === 0 && frame.sequence > previous.sequence && frame.receivedAtMs - previous.receivedAtMs <= 250 && progress >= -0.001 && progress <= 0.03) return [];
     if (frame.sequence < previous.sequence || dt <= 0 || dt > 250 || progress < -0.001 || progress > 0.03) {
       this.blocked = true;
+      this.recoveryStart = null;
       this.previous = frame;
       return [];
     }
     this.previous = frame;
     const plan = this.plan;
+    if (this.blocked && plan && frame.lapNumber === this.armedLap && frame.speedMps >= 3 && frame.brake <= 255 * 0.05) {
+      this.recoveryStart ??= previous.observedAtMs;
+      const point = plan.corner.referenceBrakeFrac ?? plan.corner.startFrac;
+      const secondsToPoint = (point - frame.fraction) * plan.trackLengthM / frame.speedMps;
+      if (frame.observedAtMs - this.recoveryStart >= 1000 && secondsToPoint > 8) {
+        this.blocked = false;
+        this.prepared = false;
+        this.braked = false;
+        this.entryMs = null;
+        this.completed = false;
+        this.emitted.clear();
+      }
+    }
     if (this.blocked || !plan || frame.speedMps < 3) return [];
     const events: PracticeCue[] = [];
     const point = plan.corner.referenceBrakeFrac ?? plan.corner.startFrac;

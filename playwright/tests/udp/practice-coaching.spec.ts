@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 test("practice coaching delivers one measured cue, three beeps and feedback", async ({ page }) => {
   await page.addInitScript(() => {
-    const recorder = window as Window & { practiceBeeps: number; practiceSpeech: string[] };
+    const recorder = window as unknown as Window & { practiceBeeps: number; practiceSpeech: string[] };
     recorder.practiceBeeps = 0;
     recorder.practiceSpeech = [];
     Object.defineProperty(window, "AudioContext", { configurable: true, value: class {
@@ -52,8 +52,8 @@ test("practice coaching delivers one measured cue, three beeps and feedback", as
     send(5, index * 0.005);
     await delay(20);
   }
-  await expect.poll(() => page.evaluate(() => (window as Window & { practiceBeeps: number }).practiceBeeps)).toBe(3);
-  const speech = await page.evaluate(() => (window as Window & { practiceSpeech: string[] }).practiceSpeech);
+  await expect.poll(() => page.evaluate(() => (window as unknown as Window & { practiceBeeps: number }).practiceBeeps)).toBe(3);
+  const speech = await page.evaluate(() => (window as unknown as Window & { practiceSpeech: string[] }).practiceSpeech);
   expect(speech.some((item) => item.includes("Reference braked 10 metres later"))).toBe(true);
   expect(speech.some((item) => item.includes("0.20 seconds quicker"))).toBe(true);
   await expect(panel.getByRole("status")).toContainText("0.20 seconds quicker");
