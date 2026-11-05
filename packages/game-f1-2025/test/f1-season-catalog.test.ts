@@ -3,6 +3,20 @@ import { getAllF1Cars, getF1CarName, hasF1CarOrdinal } from "@raceiq/game-f1-202
 import { getF1TrackInfo, getF1TrackName, getF1Tracks } from "@raceiq/game-f1-2025-metadata/racing/tracks/catalogs/f1";
 
 // EA Season 8 v1.2 appendix; IDs identify the cars, not the UDP header year.
+const season2025F2Teams = [
+  [465, "ART Grand Prix 2025"], [466, "Campos 2025"], [467, "Rodin Motorsport 2025"],
+  [468, "AIX Racing 2025"], [469, "DAMS 2025"], [470, "Hitech 2025"],
+  [471, "MP Motorsport 2025"], [472, "Prema 2025"], [473, "Trident 2025"],
+  [474, "Van Amersfoort Racing 2025"], [475, "Invicta 2025"],
+] as const;
+
+test("F2 2025 team IDs resolve to their season-specific names", () => {
+  for (const [id, name] of season2025F2Teams) {
+    expect(getF1CarName(id)).toBe(name);
+    expect(hasF1CarOrdinal(id)).toBe(true);
+  }
+});
+
 const season2026Teams = [
   [476, "Mercedes 2026"],
   [477, "Ferrari 2026"],
