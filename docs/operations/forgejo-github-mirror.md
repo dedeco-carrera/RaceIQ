@@ -48,14 +48,25 @@ The proposed `.forgejo/workflows/ci.yml` uses `ubuntu-latest` and covers workspa
 
 Forgejo Actions reads workflow definitions from `.forgejo/workflows`. GitHub Actions reads `.github/workflows`; those GitHub workflows are not automatically a Forgejo CI configuration.
 
-## Initial mirror setup
+## Current mirror configuration
 
-1. In Forgejo, open the repository's **Settings → Repository → Mirror Settings** and add a push mirror to `https://github.com/SpeedHQ/RaceIQ.git`.
-2. Authenticate with a GitHub credential that can write repository contents and workflow files. Do not store the credential in this repository.
-3. Select the desired sync-on-push and periodic sync options.
-4. For the initial takeover, synchronize Forgejo `main` to GitHub. The first sync is expected to force-update GitHub's `main` to Forgejo's `main`.
-5. Decide whether the mirror should publish only `main` initially or all refs. An unfiltered Forgejo push mirror uses mirror semantics and can overwrite or remove GitHub refs that are absent from Forgejo. Preserve any GitHub-only work outside the mirrored refs before enabling an all-ref mirror if it may be needed later.
-6. Verify the GitHub `main` SHA matches Forgejo `main`, then treat Forgejo as the only place where canonical changes are made.
+Forgejo now has a push mirror configured with these settings:
+
+- Destination: `ssh://github.com/SpeedHQ/RaceIQ.git`
+- Branch filter: `main`
+- Authentication: Forgejo-generated SSH key
+- Sync after Forgejo commits: enabled
+- Periodic sync: every 8 hours
+
+The public deploy key Forgejo generated is:
+
+```text
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOBLUGWBXZRcMEiqPqheU+E2PX4rOOVeBqxYNv1yY5o8
+```
+
+The private key remains on Forgejo. Add this public key to the GitHub repository as a deploy key with write access. The initial sync has not completed yet. After the deploy key is installed, use **Settings → Repository → Mirror Settings → Synchronize Now** in Forgejo and confirm that GitHub `main` points to the same commit as Forgejo `main`.
+
+This mirror is scoped to `main`, so the initial takeover replaces GitHub `main` with Forgejo `main` while preserving GitHub's other branch refs. An unfiltered Forgejo push mirror uses mirror semantics and can overwrite or remove GitHub refs that are absent from Forgejo. Expand to all refs only if that broader overwrite is intended.
 
 At the time of this snapshot, Forgejo repository settings showed no push mirrors configured.
 
