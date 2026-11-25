@@ -1,0 +1,121 @@
+name: Forgejo CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Quality, build, and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      BUN_TEST_WORKERS: "1"
+    steps:
+      - name: Check out source
+        uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: https://github.com/oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check test shard coverage
+        run: bun run test:shards
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Validate translations
+        run: bun run i18n:validate
+
+      - name: Check generated telemetry catalog
+        run: bun run telemetry:catalog:check
+
+      - name: Check changelog
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
+          bun scripts/release/check-changelog.ts
+
+      - name: Build RaceIQ
+        run: bun run build
+
+      - name: Run unit tests
+        run: bun run test:unit
+
+      - name: Run integration tests
+        run: bun run test:integration
+
+  recording-e2e:
+    name: Recording replay tests
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BUN_TEST_WORKERS: "1"
+    steps:
+      - name: Check out source
+        uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: https://github.com/oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Replay committed recordings
+        run: bun run test:e2e:recordings
+
+  browser-e2e:
+    name: Playwright E2E
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      E2E_SERVER_MODE: compiled
+      RACEIQ_DISABLE_TRAY: "1"
+      PW_SERVER_SET: all
+      PW_WORKERS: "1"
+    steps:
+      - name: Check out source
+        uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: https://github.com/oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Set up Node.js
+        uses: https://github.com/actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium and system dependencies
+        working-directory: playwright
+        run: bun run ../scripts/playwright-ci.ts install --with-deps chromium
+
+      - name: Run browser verification
+        run: bun run test:e2e:compiled
