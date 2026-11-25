@@ -46,6 +46,10 @@ These are representative changes on GitHub after the shared base. They are not p
 
 The `.forgejo/workflows/ci.yml` now targets the Forgejo source tree at this snapshot. It uses `ubuntu-latest` for all jobs and runs shard coverage, lint, typecheck, translation validation, telemetry-catalog validation, PR changelog checks, build, unit and integration tests, plus recording replay and browser E2E on non-PR events. It uses the root scripts available in Forgejo's current tree; the newer GitHub workspace/Turbo scripts are not present on this branch. The workflow is designed for the normal Linux worker and does not use MARS labels.
 
+Forgejo also discovers the legacy `.github/workflows/build-test.yml`. Its main job is guarded to run only when the Actions server is GitHub, so Forgejo does not queue its MARS Windows job alongside the `.forgejo` workflow. The legacy GitHub workflow remains enabled on GitHub.
+
+The first Forgejo run exposed that `.env.development` is intentionally not tracked. The CI jobs now create a minimal test environment file containing the feature flags expected by the recording tests and build.
+
 Forgejo Actions reads workflow definitions from `.forgejo/workflows`. GitHub Actions reads `.github/workflows`; those GitHub workflows are not automatically a Forgejo CI configuration.
 
 ## Current mirror configuration
