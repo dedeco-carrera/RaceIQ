@@ -64,7 +64,7 @@ The public deploy key Forgejo generated is:
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOBLUGWBXZRcMEiqPqheU+E2PX4rOOVeBqxYNv1yY5o8
 ```
 
-The private key remains on Forgejo. Add this public key to the GitHub repository as a deploy key with write access. The initial sync has not completed yet. After the deploy key is installed, use **Settings → Repository → Mirror Settings → Synchronize Now** in Forgejo and confirm that GitHub `main` points to the same commit as Forgejo `main`.
+The private key remains on Forgejo. Add this public key to the GitHub repository as a deploy key with write access. Forgejo's first sync attempt failed with `Permission denied (publickey)`, so GitHub has not been updated yet. After the deploy key is installed, use **Settings → Repository → Mirror Settings → Synchronize Now** in Forgejo and confirm that GitHub `main` points to the same commit as Forgejo `main`.
 
 This mirror is scoped to `main`, so the initial takeover replaces GitHub `main` with Forgejo `main` while preserving GitHub's other branch refs. An unfiltered Forgejo push mirror uses mirror semantics and can overwrite or remove GitHub refs that are absent from Forgejo. Expand to all refs only if that broader overwrite is intended.
 
