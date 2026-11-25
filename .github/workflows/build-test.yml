@@ -2,7 +2,7 @@ name: Build & Test
 
 on:
   push:
-    branches: [main]
+    branches: ["codex/**"]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build-test:
-    if: github.server_url == 'https://github.com' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: github.server_url == 'https://github.com' && startsWith(github.head_ref || inputs.target_ref || github.ref_name, 'codex/') && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     # Always retain compiled dist for downstream E2E diagnostics and reruns.
     # Upload step uses always() so failures before or during tests do not skip it.
     # 4 vCPU: the ACC fixture replays peak ~4GB heap and GC-thrash on 2 vCPU, timing out.

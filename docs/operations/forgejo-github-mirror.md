@@ -4,7 +4,7 @@ Status recorded: 2026-11-25
 
 ## Direction
 
-Forgejo `dedeco/speedhq-raceiq` is the canonical repository. Developers push to Forgejo. GitHub `SpeedHQ/RaceIQ` is a downstream mirror of Forgejo and must not be treated as the source of truth.
+Forgejo `dedeco/speedhq-raceiq` is the canonical repository. Developers push to Forgejo. GitHub `dedeco-carrera/RaceIQ` is the downstream mirror of Forgejo and must not be treated as the source of truth. The upstream `SpeedHQ/RaceIQ` is outside this mirror path.
 
 The intended mirror is Forgejo push mirror → GitHub. GitHub's current branch history must be replaced by Forgejo's canonical history when the mirror is first synchronized.
 
@@ -58,7 +58,7 @@ Forgejo Actions reads workflow definitions from `.forgejo/workflows`. GitHub Act
 
 Forgejo now has a push mirror configured with these settings:
 
-- Destination: `ssh://github.com/SpeedHQ/RaceIQ.git`
+- Destination: `ssh://github.com/dedeco-carrera/RaceIQ.git`
 - Branch filter: `main`
 - Authentication: Forgejo-generated SSH key
 - Sync after Forgejo commits: enabled
@@ -67,14 +67,16 @@ Forgejo now has a push mirror configured with these settings:
 The public deploy key Forgejo generated is:
 
 ```text
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOBLUGWBXZRcMEiqPqheU+E2PX4rOOVeBqxYNv1yY5o8
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMJhkvCBfgQLPH/Tyms6HpG4haLFdYStDyMFsJ7dQ7GJ
 ```
 
-The private key remains on Forgejo. Add this public key to the GitHub repository as a deploy key with write access. Forgejo's first sync attempt failed with `Permission denied (publickey)`, so GitHub has not been updated yet. After the deploy key is installed, use **Settings → Repository → Mirror Settings → Synchronize Now** in Forgejo and confirm that GitHub `main` points to the same commit as Forgejo `main`.
+The private key remains on Forgejo. Add this public key as a write-enabled deploy key on the GitHub fork `dedeco-carrera/RaceIQ`; do not add it to the upstream `SpeedHQ/RaceIQ`. After the deploy key is installed, use **Settings → Repository → Mirror Settings → Synchronize Now** in Forgejo and confirm that the fork's `main` points to the same commit as Forgejo `main`. The old key was generated for `SpeedHQ/RaceIQ` and is no longer used by the mirror.
 
-This mirror is scoped to `main`, so the initial takeover replaces GitHub `main` with Forgejo `main` while preserving GitHub's other branch refs. An unfiltered Forgejo push mirror uses mirror semantics and can overwrite or remove GitHub refs that are absent from Forgejo. Expand to all refs only if that broader overwrite is intended.
+This mirror is scoped to `main`, so the initial takeover replaces the fork's `main` with Forgejo `main` while preserving the fork's other branch refs. An unfiltered Forgejo push mirror uses mirror semantics and can overwrite or remove GitHub refs that are absent from Forgejo. Expand to all refs only if that broader overwrite is intended.
 
-At the time of this snapshot, Forgejo repository settings showed no push mirrors configured.
+The GitHub Actions `build-test.yml` workflow in this repository is configured for `codex/**` pushes and PRs into `main` from a `codex/**` head branch. It is additionally guarded to run only on `github.com`. The Forgejo `main` mirror itself will not start this workflow, and no workflow change is pushed to the SpeedHQ upstream. Push personal feature branches directly to `dedeco-carrera/RaceIQ` when GitHub Actions results are needed; the current Forgejo push mirror only synchronizes `main`.
+
+Before the push mirror was configured on 2026-11-25, Forgejo repository settings showed no push mirrors configured.
 
 ## Reference details
 
