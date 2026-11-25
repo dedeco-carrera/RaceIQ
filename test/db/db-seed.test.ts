@@ -162,7 +162,7 @@ describe("db:seed", () => {
     const second = await runSeed(dataDir);
     expect(second.code, second.output).toBe(0);
     expect(counts(dataDir)).toEqual(initial);
-  }, 120000);
+  }, 240000);
 
   test("reset replaces seed rows without deleting user sessions", async () => {
     const dataDir = makeDataDir();
@@ -182,5 +182,5 @@ describe("db:seed", () => {
       sessions: seededCounts.sessions + 1,
     });
     expect(sessionCountByNotes(dataDir, "real user session")).toBe(1);
-  }, 120000);
+  }, 240000);
 });

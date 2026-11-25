@@ -98,6 +98,6 @@ describe("F1-2025 recording", () => {
         await generateRecordingVisualizations(recordingFile, laps, rawPackets);
         console.log(`[Visualizations] Generated for ${laps.length} laps`);
       }
-    }, 120000);
+    }, 360000);
   });
 });

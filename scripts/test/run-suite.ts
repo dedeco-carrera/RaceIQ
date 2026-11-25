@@ -39,6 +39,10 @@ const workers = process.env.BUN_TEST_WORKERS ?? "4";
 if ((suite === "unit" && !/^\d+$/.test(workers)) || (suite === "unit" && Number(workers) < 1)) {
   throw new Error("BUN_TEST_WORKERS must be a positive integer");
 }
+const testTimeout = process.env.BUN_TEST_TIMEOUT ?? "30000";
+if (!/^\d+$/.test(testTimeout) || Number(testTimeout) < 1) {
+  throw new Error("BUN_TEST_TIMEOUT must be a positive integer");
+}
 const i18nCompile = Bun.spawnSync([process.execPath, "run", "--cwd", "client", "i18n:compile"], {
   cwd: root,
   stdout: "inherit",
@@ -54,10 +58,12 @@ try {
   const preload = resolve(root, "test/support/setup-data-dir.ts").replaceAll("\\", "/");
   writeFileSync(
     configPath,
-    suite === "unit" ? `[test]\nroot = "${suiteRootToml}"\ntimeout = 30000\n` : `[test]\nroot = "${suiteRootToml}"\npreload = ["${preload}"]\ntimeout = 30000\nmaxConcurrency = 1\n`,
+    suite === "unit" ? `[test]\nroot = "${suiteRootToml}"\n` : `[test]\nroot = "${suiteRootToml}"\npreload = ["${preload}"]\nmaxConcurrency = 1\n`,
   );
   const manifestFiles = files.map((file) => resolve(root, file));
-  const args = suite === "unit" ? ["test", "--config", configPath, "--parallel", workers, ...manifestFiles] : ["test", "--config", configPath, "--max-concurrency=1", ...manifestFiles];
+  const args = suite === "unit"
+    ? ["test", "--config", configPath, `--timeout=${testTimeout}`, "--parallel", workers, ...manifestFiles]
+    : ["test", "--config", configPath, `--timeout=${testTimeout}`, "--max-concurrency=1", ...manifestFiles];
   const env = { ...process.env };
   if (suite === "unit") env.RACEIQ_UNIT_TESTS = "1";
   if (suite !== "unit" && env.DATA_DIR === undefined) env.DATA_DIR = resolve(root, ".data-test");

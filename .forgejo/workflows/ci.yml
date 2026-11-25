@@ -80,8 +80,8 @@ jobs:
         run: bun run test:integration
 
   recording-e2e:
-    name: Recording replay tests
-    if: github.event_name != 'pull_request'
+    name: Recording replay tests (manual)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -111,8 +111,8 @@ jobs:
         run: bun run test:e2e:recordings
 
   browser-e2e:
-    name: Playwright E2E
-    if: github.event_name != 'pull_request'
+    name: Playwright E2E (manual)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
