@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: forgejo-ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: Quality, build, and tests
@@ -20,7 +24,17 @@ jobs:
       - name: Check out source
         uses: https://code.forgejo.org/actions/checkout@v4
         with:
-          persist-credentials: false
+          persist-credentials: true
+
+      - name: Fetch PR base for changelog check
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
+          while IFS= read -r key; do
+            git config --local --unset-all "$key"
+          done < <(git config --local --name-only --get-regexp '^http\..*\.extraheader$' || true)
 
       - name: Prepare CI development environment
         run: |
@@ -54,11 +68,7 @@ jobs:
 
       - name: Check changelog
         if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
-          bun scripts/release/check-changelog.ts
+        run: bun scripts/release/check-changelog.ts
 
       - name: Build RaceIQ
         run: bun run build

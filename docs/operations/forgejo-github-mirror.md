@@ -50,6 +50,8 @@ Forgejo also discovers the legacy `.github/workflows/build-test.yml`. Its main j
 
 The first Forgejo run exposed that `.env.development` is intentionally not tracked. The CI jobs now create a minimal test environment file containing the feature flags expected by the recording tests and build.
 
+For private-repository pull requests, the verify job fetches the base ref before running repository code, then removes checkout's temporary Git authorization header. Tests and dependency installation run after that cleanup.
+
 Forgejo Actions reads workflow definitions from `.forgejo/workflows`. GitHub Actions reads `.github/workflows`; those GitHub workflows are not automatically a Forgejo CI configuration.
 
 ## Current mirror configuration
